@@ -2,10 +2,12 @@ from keras.datasets import cifar100
 from keras.utils import np_utils
 import numpy as np
 from keras_preprocessing.image import ImageDataGenerator
+from  keras.utils import to_categorical
 
 # load data
 (X_train, y_train), (X_test, y_test) = cifar100.load_data()
 nb_classes = 100
+
 
 # Convert class vectors to binary class matrices.
 Y_train = np_utils.to_categorical(y_train, nb_classes)
@@ -25,14 +27,14 @@ X_test /= 128.
 np.random.seed(0)
 perm = np.random.permutation(X_train.shape[0])
 X_train = X_train[perm, :, :, :]
-Y_train = Y_train[perm, :, :, :]
+Y_train = Y_train[perm, :]
 
 num_training_samples = int(X_train.shape[0]*0.9)
 X_valid = X_train[num_training_samples:, :, :, :]
 X_train = X_train[:num_training_samples, :, :, :]
 
-Y_valid = Y_train[num_training_samples:, :, :, :]
-Y_train = Y_train[:num_training_samples, :, :, :]
+Y_valid = Y_train[num_training_samples:, :]
+Y_train = Y_train[:num_training_samples, :]
 
 
 # This will do preprocessing and realtime data augmentation:
