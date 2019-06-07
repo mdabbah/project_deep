@@ -7,50 +7,37 @@ from keras.callbacks import CSVLogger
 from keras.callbacks import EarlyStopping
 import keras.backend as K
 import tensorflow as tf
+from keras.applications.vgg16 import VGG16
 import sys
 
 
 def distance_loss(encodeing_layer):
 
     def loss(y_true, y_pred):
-        # print_op = tf.print("weights: ", [encodeing_layer.output], output_stream=sys.stdout)
         emebddings = K.squeeze(encodeing_layer.output, 1)
         emebddings = K.squeeze(emebddings, 1)
         norms = tf.norm(K.repeat(emebddings, batch_size) - tf.transpose(K.repeat(emebddings, batch_size), [1, 0, 2]), axis=2)
         total_loss = K.categorical_crossentropy(y_true, y_pred)
 
-        print_op = tf.print("y_true: ", K.int_shape(y_true))
-        print_op_pred = tf.print("y pred: ", K.int_shape(y_pred))
-        print_op2 = tf.print("y_true: ", y_true)
-        # y_true = K.squeeze(K.squeeze(y_true, 1), 1)
-        # y_true = tf.math.argmax(y_true, -1)
-        #
-        # y_true = tf.expand_dims(y_true, 1)
-        if K.int_shape(y_true)[1] == 1 or K.int_shape(y_true)[1] == None:
-            y_true = tf.squeeze(y_true, 1)
-            y_true = tf.squeeze(y_true, 1)
+        print_op_pred = tf.print("total loss: ", total_loss)
+
         y_eq = tf.matmul(y_true, tf.transpose(y_true)) > 0
-        # y_eq = tf.equal(y_true, K.transpose(y_true))
+        # print_op = tf.print("eq: ", tf.reduce_sum(tf.matmul(y_true, tf.transpose(y_true)))/10000)
 
         distance_loss_eq = tf.reduce_sum(tf.boolean_mask(norms, y_eq))
+        print_op2 = tf.print("loss equals: ", distance_loss_eq)
         distance_loss_diff = tf.reduce_sum(tf.maximum(0., distance_margin - tf.boolean_mask(norms, tf.logical_not(y_eq))))
+        print_op3 = tf.print("loss diff: ", distance_loss_diff)
 
-        # same_class_cntr = 0
-        # for i in range(batch_size):
-        #     i_same_class = y_true == y_true[i]
-        #     loss += norms[i, i_same_class]
-        #     same_class_cntr = np.sum(i_same_class)
-        #     loss -= tf.maximum(0, distance_margin - norms[i, ~i_same_class])
-
-        with tf.control_dependencies([print_op, print_op2, print_op_pred]):
-            return total_loss + distance_loss_eq
+        with tf.control_dependencies([print_op2, print_op_pred, print_op3]):
+            return total_loss + (distance_loss_eq + distance_loss_diff)*distance_loss_coeff
 
     return loss
 
 
 if __name__ == '__main__':
 
-    weights_file = 'distance_classifier_{epoch}_{vall_acc}_{vall_loss}_{train_acc}_{train_loss}.h5'
+    weights_file = 'distance_classifier_{epoch: 03d}_{vall_acc:.3f}_{vall_loss:.3f}_{train_acc:.3f}_{train_loss:.3f}.h5'
     lr_reducer = ReduceLROnPlateau(factor=np.sqrt(0.1), cooldown=0,
                                    patience=5, min_lr=0.5e-6)
     early_stopper = EarlyStopping(min_delta=0.001, patience=20)
@@ -63,6 +50,8 @@ if __name__ == '__main__':
     distance_margin = 25
     distance_loss_coeff = 0.2
 
+    # y_train = np.expand_dims(cifar100_data_generator.Y_train, axis=1)
+    # y_train = np.expand_dims(y_train, axis=1)
     my_generator = cifar100_data_generator.datagen.flow(cifar100_data_generator.X_train,
                                                         cifar100_data_generator.Y_train,
                                                         batch_size=batch_size)
@@ -76,8 +65,8 @@ if __name__ == '__main__':
 
     encoder = c100_classifier.get_layer('embedding')
 
-    c100_classifier.compile(optimizer='Nadam', loss=distance_loss(encoder))
-    c100_classifier.fit(my_generator,
+    c100_classifier.compile(optimizer='sgd', loss=distance_loss(encoder), metrics=['accuracy'])
+    c100_classifier.fit_generator(my_generator,
                                   steps_per_epoch=num_training_xsamples_per_epoch,
                                   callbacks=my_callbacks,
                                   validation_data=validation_data,
