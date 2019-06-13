@@ -94,11 +94,25 @@ datagen.fit(X_train)
 
 class MYGenerator(keras.utils.Sequence):
 
-    def __init__(self):
+    def __init__(self, data_type: str, batch_size: int, shuffle: bool = False):
 
-        self.imgs = X_train
-        self.labels = Y_train
-        self.batch_size = 100
+        if data_type == 'train':
+            self.imgs = X_train
+            self.labels = Y_train
+        elif data_type == 'valid':
+            self.imgs = X_valid
+            self.labels = Y_valid
+        else:
+            self.imgs = X_test
+            self.labels = Y_test
+
+        if shuffle:
+            size = self.imgs.shape[0]
+            permute = np.random.permutation(size)
+            self.imgs = self.imgs[permute, :, :, :]
+            self.labels = self.labels[permute, :]
+
+        self.batch_size = batch_size
 
     def __len__(self):
         return np.int(np.ceil(len(self.labels) / float(self.batch_size)))
@@ -108,7 +122,6 @@ class MYGenerator(keras.utils.Sequence):
         batch_x = next(datagen.flow(self.imgs[idx * self.batch_size: (idx + 1) * self.batch_size]
                                     , None, batch_size=self.batch_size, shuffle=False))\
 
-        batch_y = [self.labels[idx * self.batch_size: (idx + 1) * self.batch_size],
-                   self.labels[idx * self.batch_size: (idx + 1) * self.batch_size]]
+        batch_y = self.labels[idx * self.batch_size: (idx + 1) * self.batch_size, :]
 
         return batch_x, batch_y

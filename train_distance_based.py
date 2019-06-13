@@ -34,15 +34,15 @@ def distance_loss(encodeing_layer):
         # print the embeddings
         # print_op_embedd = tf.print("embeddings: ", embeddings)
 
-        embeddings = y_pred  # encodeing_layer.output
+        embeddings = encodeing_layer.output
         # calculate the embeddings distance from each other in the current batch
         # norms = tf.norm(K.repeat(embeddings, batch_size) - tf.transpose(K.repeat(embeddings, batch_size), [1, 0, 2]), axis=2)
         norms = tf.reduce_sum(tf.squared_difference(K.expand_dims(embeddings, 0) , tf.expand_dims(embeddings, 1)), axis=2)
 
         # the original classification loss
-        # total_loss = K.categorical_crossentropy(y_true, y_pred)
-        # total_loss = tf.reduce_mean(total_loss)
-        # print_op_pred = tf.print("classification loss: ", total_loss)  # print it
+        total_loss = K.categorical_crossentropy(y_true, y_pred)
+        total_loss = tf.reduce_mean(total_loss)
+        print_op_pred = tf.print("classification loss: ", total_loss)  # print it
 
         # boolean matrix s.t. in entry (i,j) is 1 iff label_i == label_j
         y_eq = tf.matmul(y_true, tf.transpose(y_true))
@@ -56,7 +56,7 @@ def distance_loss(encodeing_layer):
         print_op2 = tf.print("loss equals: ", distance_loss_eq)
         print_op3 = tf.print("loss diff: ", distance_loss_diff)
 
-        total_loss = (distance_loss_eq + distance_loss_diff) * distance_loss_coeff
+        total_loss += (distance_loss_eq + distance_loss_diff) * distance_loss_coeff
         with tf.control_dependencies([print_op, print_op2, print_op3]):
             return total_loss
 
@@ -80,42 +80,34 @@ if __name__ == '__main__':
     batch_size = 100
     distance_margin = 25
     distance_loss_coeff = 0.2
+    shuffle = True
 
     # my__training_generator = data_genetator.datagen.flow(data_genetator.X_train,
     #                                                      np.repeat(np.expand_dims(data_genetator.Y_train, 1), repeats=2,
     #                                                                axis=1),
     #                                                      batch_size=batch_size, shuffle=False)
 
-    my__training_generator = data_genetator.MYGenerator()
-
-    my__validation_generator = data_genetator.datagen.flow(data_genetator.X_valid,
-                                                           np.repeat(np.expand_dims(data_genetator.Y_valid, 1),
-                                                                     repeats=2, axis=1),
-                                                           batch_size=batch_size, shuffle=False)
+    my_training_generator = data_genetator.MYGenerator(data_type='train', batch_size=batch_size, shuffle=shuffle)
+    my_validation_generator = data_genetator.MYGenerator(data_type='valid', batch_size=batch_size, shuffle=shuffle)
 
     my_classifier = distance_classifier.DistanceClassifier((32, 32, 3), num_classes=100)
-
-    validation_data = data_genetator.X_valid, data_genetator.Y_valid
 
     num_training_xsamples_per_epoch = data_genetator.X_train.shape[0] // batch_size
     num_validation_xsamples_per_epoch = data_genetator.X_valid.shape[0] // batch_size
 
     encoder = my_classifier.get_layer('embedding')
-
     optimizer = Nadam(lr=1e-4, clipnorm=1)
-    my_classifier.compile(optimizer='Nadam', loss=[K.categorical_crossentropy, distance_loss(encoder)], metrics=['accuracy'])
-    my_classifier.fit_generator(my__training_generator,
-                                epochs=150,
+    my_classifier.compile(optimizer='Nadam', loss=K.categorical_crossentropy, metrics=['accuracy'])
+    my_classifier.fit_generator(my_training_generator,
+                                epochs=180,
                                 steps_per_epoch=num_training_xsamples_per_epoch,
                                 callbacks=my_callbacks,
-                                validation_data=my__validation_generator,
+                                validation_data=my_validation_generator,
                                 validation_steps=num_validation_xsamples_per_epoch,
                                 workers=1,
                                 use_multiprocessing=False)
 
-    test_generator = data_genetator.datagen.flow(data_genetator.X_test,
-                                                           data_genetator.Y_test,
-                                                           batch_size=batch_size, shuffle=True)
+    test_generator = data_genetator.MYGenerator(data_type='test', batch_size=batch_size, shuffle=True)
 
     loss, acc = my_classifier.evaluate_generator(test_generator,
                                                     steps=data_genetator.X_test.shape[0]//batch_size)

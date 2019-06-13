@@ -53,13 +53,13 @@ def DistanceClassifier(input_size, num_classes):
     x = MaxPool2D((2, 2), strides=(2, 2))(x)
 
     # 10th conv block
-    x = Conv2D(filters=300, kernel_size=(1, 1), name='embedding', padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
-    embedding = Flatten(name='flatten')(x)
+    x = Conv2D(filters=300, kernel_size=(1, 1), padding='same', kernel_regularizer=regularizers.l2(0.01))(x)
+    embedding = Flatten(name='embedding')(x)
     x = LeakyReLU(alpha=0.2)(embedding)
     x = Dropout(0.5)(x)
     x = Dense(num_classes, activation='softmax',kernel_regularizer=regularizers.l2(0.01))(x)
 
     # Create model.
-    model = models.Model(img_input, [x, embedding], name='distance_predictor')
+    model = models.Model(img_input, x, name='distance_predictor')
 
     return model
