@@ -14,34 +14,51 @@ from keras.optimizers import Nadam
 def distance_loss(encodeing_layer):
 
     def loss(y_true, y_pred):
-        embeddings = K.squeeze(encodeing_layer.output, 1)
-        embeddings = K.squeeze(embeddings, 1)
+
+
+        #  concept code
+        # y_true = tf.argmax(y_true, axis=1)
+        # loss = 0
+        # for i in range(batch_size):
+        #     for j in range(batch_size):
+        #         embedd_i = embeddings[i, :]
+        #         embedd_j = embeddings[j, :]
+        #         distance = tf.norm(embedd_i - embedd_j)
+        #         if y_true[i] == y_true[j]:
+        #             loss += distance
+        #         else:
+        #             loss += tf.maximum(0., distance_margin - distance)
+        #
+        # return loss*distance_loss_coeff/10000
 
         # print the embeddings
         # print_op_embedd = tf.print("embeddings: ", embeddings)
 
+        embeddings = y_pred  # encodeing_layer.output
         # calculate the embeddings distance from each other in the current batch
-        norms = tf.norm(K.repeat(embeddings, batch_size) - tf.transpose(K.repeat(embeddings, batch_size), [1, 0, 2]), axis=2)
+        # norms = tf.norm(K.repeat(embeddings, batch_size) - tf.transpose(K.repeat(embeddings, batch_size), [1, 0, 2]), axis=2)
+        norms = tf.reduce_sum(tf.squared_difference(K.expand_dims(embeddings, 0) , tf.expand_dims(embeddings, 1)), axis=2)
 
         # the original classification loss
-        total_loss = tf.reduce_sum(K.categorical_crossentropy(y_true, y_pred))
-        print_op_pred = tf.print("classification loss: ", total_loss)  # print it
+        # total_loss = K.categorical_crossentropy(y_true, y_pred)
+        # total_loss = tf.reduce_mean(total_loss)
+        # print_op_pred = tf.print("classification loss: ", total_loss)  # print it
 
         # boolean matrix s.t. in entry (i,j) is 1 iff label_i == label_j
         y_eq = tf.matmul(y_true, tf.transpose(y_true))
-        print_op = tf.print("eq. pairs percentage: ", tf.reduce_sum(y_eq)/batch_size**2)  # print how manny pairs are equal
+        num_pairs = batch_size**2
+        print_op = tf.print("eq. pairs percentage: ", tf.reduce_sum(y_eq)/num_pairs)  # print how manny pairs are equal
 
         # the proposed distance loss
-        distance_loss_eq = tf.reduce_sum(tf.boolean_mask(norms, y_eq))  # loss for pairs with the same label
-        distance_loss_diff = tf.reduce_sum(tf.maximum(0., distance_margin - tf.boolean_mask(norms, 1-y_eq)))  # loss for pairs with different label
+        distance_loss_eq = tf.reduce_sum(tf.boolean_mask(norms, y_eq))/num_pairs  # loss for pairs with the same label
+        distance_loss_diff = tf.reduce_sum(tf.maximum(0., distance_margin - tf.boolean_mask(norms, 1-y_eq)))/num_pairs  # loss for pairs with different label
         # print them
         print_op2 = tf.print("loss equals: ", distance_loss_eq)
         print_op3 = tf.print("loss diff: ", distance_loss_diff)
 
-        # total_loss += (distance_loss_eq + distance_loss_diff) * distance_loss_coeff
-        return total_loss
-        # with tf.control_dependencies([print_op, print_op2, print_op_pred, print_op3]):
-        #     return total_loss + (distance_loss_eq + distance_loss_diff) * distance_loss_coeff
+        total_loss = (distance_loss_eq + distance_loss_diff) * distance_loss_coeff
+        with tf.control_dependencies([print_op, print_op2, print_op3]):
+            return total_loss
 
     return loss
 
@@ -64,13 +81,17 @@ if __name__ == '__main__':
     distance_margin = 25
     distance_loss_coeff = 0.2
 
-    my__training_generator = data_genetator.datagen.flow(data_genetator.X_train,
-                                                         data_genetator.Y_train,
-                                                         batch_size=batch_size, shuffle=True)
+    # my__training_generator = data_genetator.datagen.flow(data_genetator.X_train,
+    #                                                      np.repeat(np.expand_dims(data_genetator.Y_train, 1), repeats=2,
+    #                                                                axis=1),
+    #                                                      batch_size=batch_size, shuffle=False)
+
+    my__training_generator = data_genetator.MYGenerator()
 
     my__validation_generator = data_genetator.datagen.flow(data_genetator.X_valid,
-                                                           data_genetator.Y_valid,
-                                                           batch_size=batch_size, shuffle=True)
+                                                           np.repeat(np.expand_dims(data_genetator.Y_valid, 1),
+                                                                     repeats=2, axis=1),
+                                                           batch_size=batch_size, shuffle=False)
 
     my_classifier = distance_classifier.DistanceClassifier((32, 32, 3), num_classes=100)
 
@@ -81,8 +102,8 @@ if __name__ == '__main__':
 
     encoder = my_classifier.get_layer('embedding')
 
-    optimizer = Nadam(lr=1e-4)
-    my_classifier.compile(optimizer='Nadam', loss=distance_loss(encoder), metrics=['accuracy'])
+    optimizer = Nadam(lr=1e-4, clipnorm=1)
+    my_classifier.compile(optimizer='Nadam', loss=[K.categorical_crossentropy, distance_loss(encoder)], metrics=['accuracy'])
     my_classifier.fit_generator(my__training_generator,
                                 epochs=150,
                                 steps_per_epoch=num_training_xsamples_per_epoch,
