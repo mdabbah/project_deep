@@ -5,7 +5,6 @@ from keras.datasets import cifar100
 from keras.utils import np_utils
 import numpy as np
 from keras_preprocessing.image import ImageDataGenerator
-from itertools import count
 
 # load data
 (X_train, y_train), (X_test, y_test) = cifar100.load_data()
