@@ -56,7 +56,7 @@ def rearrange_samples(X_train, Y_train, nb_classes):
 
 
 np.random.seed(0)
-X_train, Y_train = rearrange_samples(X_train, Y_train, nb_classes)
+# X_train, Y_train = rearrange_samples(X_train, Y_train, nb_classes)
 
 # subtract mean and normalize
 mean_image = np.mean(X_train, axis=0)
@@ -80,7 +80,7 @@ datagen = ImageDataGenerator(
     samplewise_center=False,  # set each sample mean to 0
     featurewise_std_normalization=False,  # divide inputs by std of the dataset
     samplewise_std_normalization=False,  # divide each input by its std
-    zca_whitening=False,  # apply ZCA whitening
+    zca_whitening=True,  # apply ZCA whitening
     rotation_range=0,  # randomly rotate images in the range (degrees, 0 to 180)
     width_shift_range=0.1,  # randomly shift images horizontally
     height_shift_range=0.1,  # randomly shift images vertically

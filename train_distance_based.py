@@ -7,8 +7,8 @@ from keras.callbacks import CSVLogger
 from keras.callbacks import EarlyStopping
 import keras.backend as K
 import tensorflow as tf
-from keras.optimizers import Nadam
-# from keras.applications.vgg16 import VGG16
+from keras.optimizers import Nadam, SGD
+from keras.applications.vgg16 import VGG16
 
 
 def distance_loss(encodeing_layer):
@@ -96,16 +96,16 @@ if __name__ == '__main__':
     num_validation_xsamples_per_epoch = data_genetator.X_valid.shape[0] // batch_size
 
     encoder = my_classifier.get_layer('embedding')
-    optimizer = Nadam(lr=1e-4, clipnorm=1)
-    my_classifier.compile(optimizer='Nadam', loss=K.categorical_crossentropy, metrics=['accuracy'])
+    optimizer = SGD(lr=1e-2, momentum=0.9) #Nadam(lr=1e-4, clipnorm=1)
+    my_classifier.compile(optimizer=optimizer, loss=K.categorical_crossentropy, metrics=['accuracy'])
     my_classifier.fit_generator(my_training_generator,
                                 epochs=180,
                                 steps_per_epoch=num_training_xsamples_per_epoch,
                                 callbacks=my_callbacks,
                                 validation_data=my_validation_generator,
                                 validation_steps=num_validation_xsamples_per_epoch,
-                                workers=1,
-                                use_multiprocessing=False)
+                                workers=4,
+                                use_multiprocessing=True)
 
     test_generator = data_genetator.MYGenerator(data_type='test', batch_size=batch_size, shuffle=True)
 
