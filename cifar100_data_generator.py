@@ -6,6 +6,7 @@ from keras.utils import np_utils
 import numpy as np
 from keras_preprocessing.image import ImageDataGenerator
 from itertools import count
+from sklearn.metrics import roc_auc_score
 
 # load data
 (X_train, y_train), (X_test, y_test) = cifar100.load_data()
@@ -56,7 +57,7 @@ def rearrange_samples(X_train, Y_train, nb_classes):
 
 
 np.random.seed(0)
-# X_train, Y_train = rearrange_samples(X_train, Y_train, nb_classes)
+X_train, Y_train = rearrange_samples(X_train, Y_train, nb_classes)
 
 # subtract mean and normalize
 mean_image = np.mean(X_train, axis=0)
@@ -76,7 +77,6 @@ Y_train = Y_train[:num_training_samples, :]
 
 # This will do preprocessing and realtime data augmentation:
 datagen = ImageDataGenerator(
-    featurewise_center=False,  # set input mean to 0 over the dataset
     samplewise_center=False,  # set each sample mean to 0
     featurewise_std_normalization=False,  # divide inputs by std of the dataset
     samplewise_std_normalization=False,  # divide each input by its std

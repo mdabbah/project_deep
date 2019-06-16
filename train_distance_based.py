@@ -5,14 +5,40 @@ from keras.callbacks import ModelCheckpoint
 from keras.callbacks import ReduceLROnPlateau
 from keras.callbacks import CSVLogger
 from keras.callbacks import EarlyStopping
+from keras.callbacks import LearningRateScheduler
 import keras.backend as K
 import tensorflow as tf
 from keras.optimizers import Nadam, SGD
 from keras.applications.vgg16 import VGG16
 
 
-def distance_loss(encodeing_layer):
+lr_cache = {67: 5e-3, 112: 5e-4, 145: 5e-5}
 
+
+def lr_scheduler(epoch, current_lr):
+    """
+    the function used to decrease the learning rate as suggested by
+    "Distance-based Confidence Score for Neural Network Classifiers"
+    https://arxiv.org/abs/1709.09844
+    :param epoch: the current epoch
+    :param current_lr: the current learning rate
+    :return: the new learning rate
+    """
+
+    new_lr = current_lr
+
+    return lr_cache.get(epoch, new_lr)
+
+
+def distance_loss(encodeing_layer):
+    """
+    the loss function that depends on the encoding of the second to last layer
+    as suggested by
+    "Distance-based Confidence Score for Neural Network Classifiers"
+    https://arxiv.org/abs/1709.09844
+    :param encodeing_layer: which layer we want to use as encoder
+    :return: loss function
+    """
     def loss(y_true, y_pred):
 
 
@@ -70,22 +96,18 @@ if __name__ == '__main__':
                    'distance_classifier_{epoch: 03d}_{val_acc:.3f}_{val_loss:.3f}_{acc:.3f}_{loss:.3f}.h5'
     lr_reducer = ReduceLROnPlateau(factor=np.sqrt(0.1), cooldown=0,
                                    patience=5, min_lr=0.5e-6)
+    lr_scheduler_callback = LearningRateScheduler(lr_scheduler)
     early_stopper = EarlyStopping(min_delta=0.001, patience=20)
     csv_logger = CSVLogger('distance_classifier-CIFAR-10.csv')
     model_checkpoint = ModelCheckpoint(weights_file, monitor='val_acc', save_best_only=True,
                                        save_weights_only=True, mode='auto')
-    my_callbacks = [csv_logger, model_checkpoint] #, lr_reducer, early_stopper]
+    my_callbacks = [csv_logger, model_checkpoint, lr_scheduler_callback] # lr_scheduler_callback , lr_reducer, early_stopper]
 
     # training constants
     batch_size = 100
     distance_margin = 25
     distance_loss_coeff = 0.2
-    shuffle = True
-
-    # my__training_generator = data_genetator.datagen.flow(data_genetator.X_train,
-    #                                                      np.repeat(np.expand_dims(data_genetator.Y_train, 1), repeats=2,
-    #                                                                axis=1),
-    #                                                      batch_size=batch_size, shuffle=False)
+    shuffle = False
 
     my_training_generator = data_genetator.MYGenerator(data_type='train', batch_size=batch_size, shuffle=shuffle)
     my_validation_generator = data_genetator.MYGenerator(data_type='valid', batch_size=batch_size, shuffle=shuffle)
@@ -97,7 +119,7 @@ if __name__ == '__main__':
 
     encoder = my_classifier.get_layer('embedding')
     optimizer = SGD(lr=1e-2, momentum=0.9) #Nadam(lr=1e-4, clipnorm=1)
-    my_classifier.compile(optimizer=optimizer, loss=K.categorical_crossentropy, metrics=['accuracy'])
+    my_classifier.compile(optimizer=optimizer, loss=distance_loss(encoder), metrics=['accuracy'])
     my_classifier.fit_generator(my_training_generator,
                                 epochs=180,
                                 steps_per_epoch=num_training_xsamples_per_epoch,
