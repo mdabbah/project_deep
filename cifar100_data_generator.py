@@ -94,7 +94,7 @@ datagen.fit(X_train)
 
 class MYGenerator(keras.utils.Sequence):
 
-    def __init__(self, data_type: str, batch_size: int, shuffle: bool = False):
+    def __init__(self, data_type: str, batch_size: int = 100, shuffle: bool = False):
 
         if data_type == 'train':
             self.imgs = X_train

@@ -30,7 +30,7 @@ def lr_scheduler(epoch, current_lr):
     return lr_cache.get(epoch, new_lr)
 
 
-def distance_loss(encodeing_layer):
+def distance_loss(encodeing_layer, batch_size=100, distance_margin = 25, distance_loss_coeff = 0.2):
     """
     the loss function that depends on the encoding of the second to last layer
     as suggested by
@@ -119,7 +119,7 @@ if __name__ == '__main__':
 
     encoder = my_classifier.get_layer('embedding')
     optimizer = SGD(lr=1e-2, momentum=0.9) #Nadam(lr=1e-4, clipnorm=1)
-    my_classifier.compile(optimizer=optimizer, loss=distance_loss(encoder), metrics=['accuracy'])
+    my_classifier.compile(optimizer=optimizer, loss=distance_loss(encoder, batch_size), metrics=['accuracy'])
     my_classifier.fit_generator(my_training_generator,
                                 epochs=180,
                                 steps_per_epoch=num_training_xsamples_per_epoch,
