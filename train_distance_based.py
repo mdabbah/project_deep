@@ -42,7 +42,7 @@ def distance_loss(encodeing_layer, batch_size=100, distance_margin = 25, distanc
     def loss(y_true, y_pred):
 
 
-        #  concept code
+        #  concept code?
         # y_true = tf.argmax(y_true, axis=1)
         # loss = 0
         # for i in range(batch_size):
@@ -61,9 +61,15 @@ def distance_loss(encodeing_layer, batch_size=100, distance_margin = 25, distanc
         # print_op_embedd = tf.print("embeddings: ", embeddings)
 
         embeddings = encodeing_layer.output
+        eps = 0.0015
         # calculate the embeddings distance from each other in the current batch
-        # norms = tf.norm(K.repeat(embeddings, batch_size) - tf.transpose(K.repeat(embeddings, batch_size), [1, 0, 2]), axis=2)
-        norms = tf.reduce_sum(tf.squared_difference(K.expand_dims(embeddings, 0) , tf.expand_dims(embeddings, 1)), axis=2)
+        # norms = tf.norm(K.expand_dims(embeddings, 0)``1vcxc>\ - tf.expand_dims(embeddings, 1), axis=2)
+        norms = tf.reduce_sum(tf.squared_difference(K.expand_dims(embeddings, 0), tf.expand_dims(embeddings, 1)), axis=2)
+        norms = tf.sqrt(norms + eps)
+
+
+        # no sqrt implementation:
+        # norms = tf.reduce_sum(tf.squared_difference(K.expand_dims(embeddings, 0), tf.expand_dims(embeddings, 1)), axis=2)
 
         # the original classification loss
         total_loss = K.categorical_crossentropy(y_true, y_pred)
@@ -76,7 +82,7 @@ def distance_loss(encodeing_layer, batch_size=100, distance_margin = 25, distanc
         print_op = tf.print("eq. pairs percentage: ", tf.reduce_sum(y_eq)/num_pairs)  # print how manny pairs are equal
 
         # the proposed distance loss
-        distance_loss_eq = tf.reduce_sum(tf.boolean_mask(norms, y_eq))/num_pairs  # loss for pairs with the same label
+        distance_loss_eq = tf.reduce_sum(tf.boolean_mask(norms, y_eq - tf.eye(batch_size)))/num_pairs  # loss for pairs with the same label
         distance_loss_diff = tf.reduce_sum(tf.maximum(0., distance_margin - tf.boolean_mask(norms, 1-y_eq)))/num_pairs  # loss for pairs with different label
         # print them
         print_op2 = tf.print("loss equals: ", distance_loss_eq)
