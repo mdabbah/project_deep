@@ -1,5 +1,5 @@
 import distance_classifier
-import cifar100_data_generator as data_genetator
+import stl10_data_generator as data_genetator
 import numpy as np
 from keras.callbacks import ModelCheckpoint
 from keras.callbacks import ReduceLROnPlateau
@@ -12,22 +12,44 @@ from keras.optimizers import Nadam, SGD
 from keras.applications.vgg16 import VGG16
 
 
-lr_cache = {67: 5e-3, 112: 5e-4, 145: 5e-5}
+lr_cache_cifar100 = {67: 5e-3, 112: 5e-4, 145: 5e-5}
+lr_cache_stl10 = {134: 5e-3, 223: 5e-4, 289: 5e-5}
 
 
-def lr_scheduler(epoch, current_lr):
+def lr_scheduler_maker(dataset_name: str, scheduling_dictionary: dict =None):
     """
-    the function used to decrease the learning rate as suggested by
-    "Distance-based Confidence Score for Neural Network Classifiers"
-    https://arxiv.org/abs/1709.09844
-    :param epoch: the current epoch
-    :param current_lr: the current learning rate
-    :return: the new learning rate
+    takes a dataset name and returns an lr_scheduler function
+    :param dataset_name: name of the dataset
+    :param scheduling_dictionary: should be a dictionarty where key is epoch : value is lr
+    you can also just define the transitional epochs in this dictionary
+    :return: lr_scheduler function to be passed to LearningRateScheduler object
     """
+    if dataset_name == 'cifar100':
+        lr_cache = lr_cache_cifar100
+    elif dataset_name == 'stl10':
+        lr_cache = lr_cache_stl10
+    else:
+        Warning('supported datasets are cifar100, and stl10, will be using'
+                ' the scheduling_dictionary ')
+        if scheduling_dictionary is None:
+            ValueError('bad parameters: no scheduling dict was passed')
+        lr_cache = scheduling_dictionary
 
-    new_lr = current_lr
+    def lr_scheduler(epoch, current_lr):
+        """
+        the function used to decrease the learning rate as suggested by
+        "Distance-based Confidence Score for Neural Network Classifiers"
+        https://arxiv.org/abs/1709.09844
+        :param epoch: the current epoch
+        :param current_lr: the current learning rate
+        :return: the new learning rate
+        """
 
-    return lr_cache.get(epoch, new_lr)
+        new_lr = current_lr
+
+        return lr_cache.get(epoch, new_lr)
+
+    return lr_scheduler
 
 
 def distance_loss(encodeing_layer, batch_size=100, distance_margin = 25, distance_loss_coeff = 0.2):
@@ -98,13 +120,13 @@ def distance_loss(encodeing_layer, batch_size=100, distance_margin = 25, distanc
 if __name__ == '__main__':
 
     # file name & after epoch callbacks
-    weights_file = './results/distance_classifiers/' \
+    weights_file = './results/distance_classifiers_stl10/' \
                    'distance_classifier_{epoch: 03d}_{val_acc:.3f}_{val_loss:.3f}_{acc:.3f}_{loss:.3f}.h5'
     lr_reducer = ReduceLROnPlateau(factor=np.sqrt(0.1), cooldown=0,
                                    patience=5, min_lr=0.5e-6)
-    lr_scheduler_callback = LearningRateScheduler(lr_scheduler)
+    lr_scheduler_callback = LearningRateScheduler(lr_scheduler_maker('stl10'))
     early_stopper = EarlyStopping(min_delta=0.001, patience=20)
-    csv_logger = CSVLogger('distance_classifier-CIFAR-10.csv')
+    csv_logger = CSVLogger('distance_classifier-stl-10.csv')
     model_checkpoint = ModelCheckpoint(weights_file, monitor='val_acc', save_best_only=True,
                                        save_weights_only=True, mode='auto')
     my_callbacks = [csv_logger, model_checkpoint, lr_scheduler_callback] # lr_scheduler_callback , lr_reducer, early_stopper]
@@ -113,27 +135,30 @@ if __name__ == '__main__':
     batch_size = 100
     distance_margin = 25
     distance_loss_coeff = 0.2
+    nb_classes = 10
     shuffle = False
+    input_size = (96, 96, 3)  # for cifar100 = (32, 32, 3)
+    num_epochs = 360  # for cifar100 180
 
     my_training_generator = data_genetator.MYGenerator(data_type='train', batch_size=batch_size, shuffle=shuffle)
     my_validation_generator = data_genetator.MYGenerator(data_type='valid', batch_size=batch_size, shuffle=shuffle)
 
-    my_classifier = distance_classifier.DistanceClassifier((32, 32, 3), num_classes=100)
+    my_classifier = distance_classifier.DistanceClassifier(input_size, num_classes=nb_classes)
 
-    num_training_xsamples_per_epoch = data_genetator.X_train.shape[0] // batch_size
-    num_validation_xsamples_per_epoch = data_genetator.X_valid.shape[0] // batch_size
+    num_training_xsamples_per_epoch = data_genetator.Y_train.shape[0] // batch_size
+    num_validation_xsamples_per_epoch = data_genetator.Y_valid.shape[0] // batch_size
 
     encoder = my_classifier.get_layer('embedding')
     optimizer = SGD(lr=1e-2, momentum=0.9) #Nadam(lr=1e-4, clipnorm=1)
     my_classifier.compile(optimizer=optimizer, loss=distance_loss(encoder, batch_size), metrics=['accuracy'])
     my_classifier.fit_generator(my_training_generator,
-                                epochs=180,
+                                epochs=num_epochs,
                                 steps_per_epoch=num_training_xsamples_per_epoch,
                                 callbacks=my_callbacks,
                                 validation_data=my_validation_generator,
                                 validation_steps=num_validation_xsamples_per_epoch,
-                                workers=4,
-                                use_multiprocessing=True)
+                                workers=1,
+                                use_multiprocessing=False)
 
     test_generator = data_genetator.MYGenerator(data_type='test', batch_size=batch_size, shuffle=True)
 
