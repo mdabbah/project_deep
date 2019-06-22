@@ -89,10 +89,12 @@ def unpickle_embeddings(pickle_name: str):
 
 if __name__ == '__main__':
 
-    # model_name = './results/distance_classifiers/distance_classifier_ 126_0.627_2.389_0.759_1.609.h5'
-    # exp_name = 'distance trained model, SR predicted'
+    # model_name = './results/distance_classifiers_squared/distance_classifier_ 126_0.627_2.389_0.759_1.609.h5'
+    # exp_name = 'distance squared trained model, SR predicted'
     model_name = './results/cifar100_crossentropy_classifiers/distance_classifier_ 154_0.615_2.382_0.709_1.032.h5'
     exp_name = 'reg trained model, SR predicted'
+    # model_name = './results/distance_classifiers/distance_classifier_ 142_0.640_2.538_0.785_1.719.h5'
+    # exp_name = 'distance trained model, SR predicted, confidence '
 
     #  'max margin'  , 'distance' , 'negative entropy'
     confidence_score = 'distance'
@@ -133,3 +135,6 @@ if __name__ == '__main__':
     print(classification_report(y_true, predictions_masks))
     auc = roc_auc_score(y_true, y_pred)
     print(f'auc score for {exp_name} is {auc}')
+
+    loss , acc = my_classifier.evaluate_generator(test_generator)
+    print(f'for {exp_name} loss = {loss}, acc = {acc}')
