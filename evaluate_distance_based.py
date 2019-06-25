@@ -50,7 +50,7 @@ def negative_entropy(y_pred):
     :param y_pred:
     :return: a vector, where cell i has the negative entropy for y_pred[i, :]
     """
-    negative_entropy_vec = np.sum(np.nan_to_num(-y_pred*np.log(y_pred)), axis=-1)
+    negative_entropy_vec = np.sum(np.nan_to_num(y_pred*np.log(y_pred)), axis=-1)
     return negative_entropy_vec
 
 
@@ -112,11 +112,12 @@ if __name__ == '__main__':
     y_pred = my_classifier.predict_generator(test_generator)
     y_true = test_generator.labels
     predictions_masks = np_utils.to_categorical(y_pred.argmax(axis=-1))
+    y_true = np.sum(y_true*predictions_masks, axis=-1)
 
     if confidence_score == 'max margin':
-        y_pred = predictions_masks*y_pred
+        y_pred = np.sum(predictions_masks*y_pred, axis=-1)
     elif confidence_score == 'negative entropy':
-        y_pred = predictions_masks*np.expand_dims(negative_entropy(y_pred), axis=1)
+        y_pred = negative_entropy(y_pred)
     elif confidence_score == 'distance':
         model_name = os.path.split(model_name)[-1][:-3]
         pkl = unpickle_embeddings(model_name)
@@ -129,12 +130,13 @@ if __name__ == '__main__':
                               outputs=my_classifier.get_layer(layer_name).output)
         test_embeddings = encoder_model.predict_generator(test_generator)
         distance_scores = distance_score(test_embeddings, x_embeddings_train=pkl[0], y_true_train=pkl[1], K=50)
-        y_pred = predictions_masks*distance_scores
-        y_pred[np.isnan(y_pred)] = 1e-2
+        distance_scores[np.isnan(distance_scores)] = 0
+        # predictions_masks = np_utils.to_categorical(distance_scores.argmax(axis=-1))
+        y_pred = np.sum(predictions_masks*distance_scores, axis=-1)
 
-    print(classification_report(y_true, predictions_masks))
+    # print(classification_report(y_true, predictions_masks))
     auc = roc_auc_score(y_true, y_pred)
     print(f'auc score for {exp_name} is {auc}')
 
-    loss , acc = my_classifier.evaluate_generator(test_generator)
+    loss, acc = my_classifier.evaluate_generator(test_generator)
     print(f'for {exp_name} loss = {loss}, acc = {acc}')
