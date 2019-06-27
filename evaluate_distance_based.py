@@ -6,7 +6,6 @@ from sklearn.metrics import classification_report, roc_auc_score
 import numpy as np
 from train_distance_based import distance_loss
 import distance_classifier
-import cifar100_data_generator as data_genetator
 import os.path
 
 
@@ -54,7 +53,7 @@ def negative_entropy(y_pred):
     return negative_entropy_vec
 
 
-def pickle_embeddings(model,  pickle_name):
+def pickle_embeddings(model,  pickle_name, dataset_name: str):
     """pickles the embeddings outputted by the model from its embedding layer into
     a tuple (x_embed , y) where x_embed is num_train_samples X embedding_length.
     pickle name saved is: f'my_embeddings_{pickle_name}'
@@ -66,18 +65,20 @@ def pickle_embeddings(model,  pickle_name):
     my_data_generator = data_genetator.MYGenerator('train', batch_size=100)
     embeddings = encoder_model.predict_generator(my_data_generator)
 
-    with open(f'./embeddings/embeddings_for_{pickle_name}.pkl', 'wb') as pkl_out:
+    os.makedirs(f'./embeddings/{dataset_name}', exist_ok=True)
+
+    with open(f'./embeddings/{dataset_name}/embeddings_for_{pickle_name}.pkl', 'wb') as pkl_out:
         pickle.dump((embeddings, my_data_generator.labels), pkl_out)
 
 
-def unpickle_embeddings(pickle_name: str):
+def unpickle_embeddings(pickle_name: str, dataset_name: str):
     """
     returns the tuple pickled by pickle_embeddings method
      a tuple (x_embed , y) where x_embed is num_train_samples X embedding_length
     :param pickle_name: the name of the embeddings pickle file
     :return:  a tuple (x_embed , y)
     """
-    fname = f'./embeddings/embeddings_for_{pickle_name}.pkl'
+    fname = f'./embeddings/{dataset_name}/embeddings_for_{pickle_name}.pkl'
     if not os.path.isfile(fname):
         return False
     import pickle
@@ -89,19 +90,37 @@ def unpickle_embeddings(pickle_name: str):
 
 if __name__ == '__main__':
 
+
+    # cifar 100 models
+    # dataset_name = 'cifar100'
     # model_name = './results/distance_classifiers_squared/distance_classifier_ 126_0.627_2.389_0.759_1.609.h5'
     # exp_name = 'distance squared trained model, SR predicted'
-    model_name = './results/cifar100_crossentropy_classifiers/distance_classifier_ 154_0.615_2.382_0.709_1.032.h5'
-    exp_name = 'reg trained model, SR predicted'
+    # model_name = './results/cifar100_crossentropy_classifiers/distance_classifier_ 154_0.615_2.382_0.709_1.032.h5'
+    # exp_name = 'reg trained model, SR predicted'
     # model_name = './results/distance_classifiers/distance_classifier_ 142_0.640_2.538_0.785_1.719.h5'
     # exp_name = 'distance trained model, SR predicted, confidence '
+
+    # cifar 10 models
+    dataset_name = 'cifar10'
+    # model_name = './results/crossentropy_classifiers_CIFAR-10/crossentropy_classifier_ 147_0.899_0.564_0.983_0.227.h5'
+    # exp_name = 'ce  trained model, SR predicted'
+    model_name = './results/distance_classifiers_CIFAR-10/distance_classifier_ 165_0.907_1.350_0.986_0.556.h5'
+    exp_name = 'ce  trained model, SR predicted'
+
+    # loading data
+    if dataset_name == 'cifar10':
+        import cifar10_data_generator as data_genetator  # choose data set
+        print("eval. on cifar10")
+    elif dataset_name == 'cifar100':
+        import cifar100_data_generator as data_genetator  # choose data set
+        print("eval. on cifar100")
 
     #  'max margin'  , 'distance' , 'negative entropy'
     confidence_score = 'distance'
 
     # loading and compiling the model
     batch_size = 100
-    my_classifier = distance_classifier.DistanceClassifier((32, 32, 3), num_classes=100)
+    my_classifier = distance_classifier.DistanceClassifier((32, 32, 3), num_classes=data_genetator.nb_classes)
     my_classifier.load_weights(model_name)
     optimizer = SGD(lr=1e-2, momentum=0.9)
     encoder = my_classifier.get_layer('embedding')
@@ -120,10 +139,10 @@ if __name__ == '__main__':
         y_pred = negative_entropy(y_pred)
     elif confidence_score == 'distance':
         model_name = os.path.split(model_name)[-1][:-3]
-        pkl = unpickle_embeddings(model_name)
+        pkl = unpickle_embeddings(model_name, dataset_name)
         if not pkl:
-            pickle_embeddings(my_classifier, model_name)
-            pkl = unpickle_embeddings(model_name)
+            pickle_embeddings(my_classifier, model_name, dataset_name)
+            pkl = unpickle_embeddings(model_name, dataset_name)
 
         layer_name = 'embedding'
         encoder_model = Model(inputs=my_classifier.input,

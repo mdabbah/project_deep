@@ -1,5 +1,4 @@
 import distance_classifier
-import cifar100_data_generator as data_genetator
 import numpy as np
 from keras.callbacks import ModelCheckpoint
 from keras.callbacks import ReduceLROnPlateau
@@ -10,6 +9,7 @@ import keras.backend as K
 import tensorflow as tf
 from keras.optimizers import Nadam, SGD
 from keras.applications.vgg16 import VGG16
+import os
 
 
 lr_cache = {67: 5e-3, 112: 5e-4, 145: 5e-5}
@@ -39,6 +39,7 @@ def distance_loss(encodeing_layer, batch_size=100, distance_margin = 25, distanc
     :param encodeing_layer: which layer we want to use as encoder
     :return: loss function
     """
+    print("generating distance loss function ...")
     def loss(y_true, y_pred):
 
 
@@ -97,35 +98,55 @@ def distance_loss(encodeing_layer, batch_size=100, distance_margin = 25, distanc
 
 if __name__ == '__main__':
 
-    # file name & after epoch callbacks
-    weights_file = './results/distance_classifiers/' \
-                   'distance_classifier_{epoch: 03d}_{val_acc:.3f}_{val_loss:.3f}_{acc:.3f}_{loss:.3f}.h5'
+    # wheere to save weights , dataset & training details change if needed
+    data_set = 'CIFAR-10'
+    weights_folder = f'./results/distance_classifiers_{data_set}'
+    training_type = 'distance_classifier'  # or 'distance_classifier
+    os.makedirs(weights_folder, exist_ok=True)
+    weights_file = f'{weights_folder}/{training_type}' \
+                   '_{epoch: 03d}_{val_acc:.3f}_{val_loss:.3f}_{acc:.3f}_{loss:.3f}.h5'
+
+    # callbacks change if needed
     lr_reducer = ReduceLROnPlateau(factor=np.sqrt(0.1), cooldown=0,
                                    patience=5, min_lr=0.5e-6)
     lr_scheduler_callback = LearningRateScheduler(lr_scheduler)
     early_stopper = EarlyStopping(min_delta=0.001, patience=20)
-    csv_logger = CSVLogger('distance_classifier-CIFAR-10.csv')
+    csv_logger = CSVLogger(f'{training_type}-{data_set}.csv')
     model_checkpoint = ModelCheckpoint(weights_file, monitor='val_acc', save_best_only=True,
                                        save_weights_only=True, mode='auto')
     my_callbacks = [csv_logger, model_checkpoint, lr_scheduler_callback] # lr_scheduler_callback , lr_reducer, early_stopper]
 
-    # training constants
+    # loading data
+    if data_set == 'CIFAR-10':
+        import cifar10_data_generator as data_genetator  # choose data set
+        print("training on cifar10")
+    elif data_set == 'CIFAR-100':
+        import cifar100_data_generator as data_genetator  # choose data set
+        print("training on cifar100")
+
+    # training constants, change if needed
     batch_size = 100
     distance_margin = 25
     distance_loss_coeff = 0.2
     shuffle = False
-
-    my_training_generator = data_genetator.MYGenerator(data_type='train', batch_size=batch_size, shuffle=shuffle)
-    my_validation_generator = data_genetator.MYGenerator(data_type='valid', batch_size=batch_size, shuffle=shuffle)
-
-    my_classifier = distance_classifier.DistanceClassifier((32, 32, 3), num_classes=100)
-
+    input_size = (32, 32, 3)
     num_training_xsamples_per_epoch = data_genetator.X_train.shape[0] // batch_size
     num_validation_xsamples_per_epoch = data_genetator.X_valid.shape[0] // batch_size
 
+    # data generators
+    my_training_generator = data_genetator.MYGenerator(data_type='train', batch_size=batch_size, shuffle=shuffle)
+    my_validation_generator = data_genetator.MYGenerator(data_type='valid', batch_size=batch_size, shuffle=shuffle)
+
+    # creating the classification model and compiling it
+    my_classifier = distance_classifier.DistanceClassifier(input_size, num_classes=data_genetator.nb_classes)
     encoder = my_classifier.get_layer('embedding')
-    optimizer = SGD(lr=1e-2, momentum=0.9) #Nadam(lr=1e-4, clipnorm=1)
-    my_classifier.compile(optimizer=optimizer, loss=distance_loss(encoder, batch_size), metrics=['accuracy'])
+    optimizer = SGD(lr=1e-2, momentum=0.9)  # Nadam(lr=1e-4, clipnorm=1)
+    loss_function = \
+        distance_loss(encoder, batch_size) if training_type.startswith('distance') else K.categorical_crossentropy
+
+    my_classifier.compile(optimizer=optimizer, loss=loss_function, metrics=['accuracy'])
+
+    # start training
     my_classifier.fit_generator(my_training_generator,
                                 epochs=180,
                                 steps_per_epoch=num_training_xsamples_per_epoch,
@@ -137,6 +158,7 @@ if __name__ == '__main__':
 
     test_generator = data_genetator.MYGenerator(data_type='test', batch_size=batch_size, shuffle=True)
 
+    # check acc
     loss, acc = my_classifier.evaluate_generator(test_generator,
                                                     steps=data_genetator.X_test.shape[0]//batch_size)
 
