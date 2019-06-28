@@ -99,9 +99,9 @@ def distance_loss(encodeing_layer, batch_size=100, distance_margin = 25, distanc
 if __name__ == '__main__':
 
     # wheere to save weights , dataset & training details change if needed
-    data_set = 'CIFAR-10'
-    weights_folder = f'./results/distance_classifiers_{data_set}'
-    training_type = 'distance_classifier'  # or 'distance_classifier
+    data_set = 'SVHN'
+    training_type = 'crossentropy_classifier'  # options 'crossentropy_classifier', 'distance_classifier'
+    weights_folder = f'./results/{training_type}s_{data_set}'
     os.makedirs(weights_folder, exist_ok=True)
     weights_file = f'{weights_folder}/{training_type}' \
                    '_{epoch: 03d}_{val_acc:.3f}_{val_loss:.3f}_{acc:.3f}_{loss:.3f}.h5'
@@ -123,6 +123,9 @@ if __name__ == '__main__':
     elif data_set == 'CIFAR-100':
         import cifar100_data_generator as data_genetator  # choose data set
         print("training on cifar100")
+    elif data_set == 'SVHN':
+        import svhn_data_generator as data_genetator  # choose data set
+        print("training on SVHN")
 
     # training constants, change if needed
     batch_size = 100
@@ -153,8 +156,8 @@ if __name__ == '__main__':
                                 callbacks=my_callbacks,
                                 validation_data=my_validation_generator,
                                 validation_steps=num_validation_xsamples_per_epoch,
-                                workers=4,
-                                use_multiprocessing=True)
+                                workers=1,
+                                use_multiprocessing=0)
 
     test_generator = data_genetator.MYGenerator(data_type='test', batch_size=batch_size, shuffle=True)
 
