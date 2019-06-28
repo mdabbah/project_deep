@@ -1,4 +1,3 @@
-import distance_classifier
 import numpy as np
 from keras.callbacks import ModelCheckpoint
 from keras.callbacks import ReduceLROnPlateau
@@ -7,27 +6,52 @@ from keras.callbacks import EarlyStopping
 from keras.callbacks import LearningRateScheduler
 import keras.backend as K
 import tensorflow as tf
-from keras.optimizers import Nadam, SGD
+from keras.optimizers import Adam, SGD
 from keras.applications.vgg16 import VGG16
 import os
 
 
-lr_cache = {67: 5e-3, 112: 5e-4, 145: 5e-5}
+lr_cache_cifar100 = {67: 5e-3, 112: 5e-4, 145: 5e-5}
+lr_cache_stl10 = {134: 5e-3, 223: 5e-4, 289: 5e-5}
+lr_cache_svhn = {0: 1e-3, 9: 5e-4, 15: 5e-5}
 
 
-def lr_scheduler(epoch, current_lr):
+def lr_scheduler_maker(dataset_name: str, scheduling_dictionary: dict =None):
     """
-    the function used to decrease the learning rate as suggested by
-    "Distance-based Confidence Score for Neural Network Classifiers"
-    https://arxiv.org/abs/1709.09844
-    :param epoch: the current epoch
-    :param current_lr: the current learning rate
-    :return: the new learning rate
+    takes a dataset name and returns an lr_scheduler function
+    :param dataset_name: name of the dataset
+    :param scheduling_dictionary: should be a dictionarty where key is epoch : value is lr
+    you can also just define the transitional epochs in this dictionary
+    :return: lr_scheduler function to be passed to LearningRateScheduler object
     """
+    if dataset_name == 'cifar100':
+        lr_cache = lr_cache_cifar100
+    elif dataset_name == 'stl10':
+        lr_cache = lr_cache_stl10
+    elif data_set == 'SVHN':
+        lr_cache = lr_cache_svhn
+    else:
+        Warning('supported datasets are cifar100, and stl10, will be using'
+                ' the scheduling_dictionary ')
+        if scheduling_dictionary is None:
+            ValueError('bad parameters: no scheduling dict was passed')
+        lr_cache = scheduling_dictionary
 
-    new_lr = current_lr
+    def lr_scheduler(epoch, current_lr):
+        """
+        the function used to decrease the learning rate as suggested by
+        "Distance-based Confidence Score for Neural Network Classifiers"
+        https://arxiv.org/abs/1709.09844
+        :param epoch: the current epoch
+        :param current_lr: the current learning rate
+        :return: the new learning rate
+        """
 
-    return lr_cache.get(epoch, new_lr)
+        new_lr = current_lr
+
+        return lr_cache.get(epoch, new_lr)
+
+    return lr_scheduler
 
 
 def distance_loss(encodeing_layer, batch_size=100, distance_margin = 25, distance_loss_coeff = 0.2):
@@ -43,31 +67,12 @@ def distance_loss(encodeing_layer, batch_size=100, distance_margin = 25, distanc
     def loss(y_true, y_pred):
 
 
-        #  concept code?
-        # y_true = tf.argmax(y_true, axis=1)
-        # loss = 0
-        # for i in range(batch_size):
-        #     for j in range(batch_size):
-        #         embedd_i = embeddings[i, :]
-        #         embedd_j = embeddings[j, :]
-        #         distance = tf.norm(embedd_i - embedd_j)
-        #         if y_true[i] == y_true[j]:
-        #             loss += distance
-        #         else:
-        #             loss += tf.maximum(0., distance_margin - distance)
-        #
-        # return loss*distance_loss_coeff/10000
-
-        # print the embeddings
-        # print_op_embedd = tf.print("embeddings: ", embeddings)
-
         embeddings = encodeing_layer.output
         eps = 0.0015
         # calculate the embeddings distance from each other in the current batch
         # norms = tf.norm(K.expand_dims(embeddings, 0)``1vcxc>\ - tf.expand_dims(embeddings, 1), axis=2)
         norms = tf.reduce_sum(tf.squared_difference(K.expand_dims(embeddings, 0), tf.expand_dims(embeddings, 1)), axis=2)
         norms = tf.sqrt(norms + eps)
-
 
         # no sqrt implementation:
         # norms = tf.reduce_sum(tf.squared_difference(K.expand_dims(embeddings, 0), tf.expand_dims(embeddings, 1)), axis=2)
@@ -109,7 +114,7 @@ if __name__ == '__main__':
     # callbacks change if needed
     lr_reducer = ReduceLROnPlateau(factor=np.sqrt(0.1), cooldown=0,
                                    patience=5, min_lr=0.5e-6)
-    lr_scheduler_callback = LearningRateScheduler(lr_scheduler)
+    lr_scheduler_callback = LearningRateScheduler(lr_scheduler_maker(data_set))
     early_stopper = EarlyStopping(min_delta=0.001, patience=20)
     csv_logger = CSVLogger(f'{training_type}-{data_set}.csv')
     model_checkpoint = ModelCheckpoint(weights_file, monitor='val_acc', save_best_only=True,
@@ -140,10 +145,21 @@ if __name__ == '__main__':
     my_training_generator = data_genetator.MYGenerator(data_type='train', batch_size=batch_size, shuffle=shuffle)
     my_validation_generator = data_genetator.MYGenerator(data_type='valid', batch_size=batch_size, shuffle=shuffle)
 
+    # choosing arch and optimizer
+    if data_set.startswith('SVHN'):
+        import SVHN_arch_classifier as distance_classifier
+        optimizer = Adam(lr=1e-3)
+        num_epochs = 26
+        print('SVHN suggested arch chosen, optimizer adam')
+    else:
+        import distance_classifier
+        optimizer = SGD(lr=1e-2, momentum=0.9)
+        num_epochs = 180
+        print('cifar100 suggested arch chosen, optimizer SGD w. momentum')
+
     # creating the classification model and compiling it
     my_classifier = distance_classifier.DistanceClassifier(input_size, num_classes=data_genetator.nb_classes)
     encoder = my_classifier.get_layer('embedding')
-    optimizer = SGD(lr=1e-2, momentum=0.9)  # Nadam(lr=1e-4, clipnorm=1)
     loss_function = \
         distance_loss(encoder, batch_size) if training_type.startswith('distance') else K.categorical_crossentropy
 
@@ -151,7 +167,7 @@ if __name__ == '__main__':
 
     # start training
     my_classifier.fit_generator(my_training_generator,
-                                epochs=180,
+                                epochs=num_epochs,
                                 steps_per_epoch=num_training_xsamples_per_epoch,
                                 callbacks=my_callbacks,
                                 validation_data=my_validation_generator,
