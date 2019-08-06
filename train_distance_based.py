@@ -107,12 +107,13 @@ def distance_loss(encodeing_layer, batch_size=100, distance_margin = 25, distanc
 def build_inception_resnet_classifier(input_size=(96, 96, 3)):
     num_classes = data_genetator.nb_classes
     base_model = inception_resnet_v2.InceptionResNetV2(include_top=False, input_shape=input_size,
-                                                       classes=num_classes)
+                                                       classes=num_classes, pooling='avg')
 
     x = base_model.output
-    # let's add a fully-connected layer for embedding
-    x = Dense(300, activation='relu')(x)
-    x = Flatten(name='embedding')(x)
+    # let's add 2 fully-connected layer for embedding
+    x = Dense(512, activation='relu')(x)
+    x = Dense(300, activation='relu', name='embedding')(x)
+    # x = Flatten(name='embedding')(x)
     # and a prediction layer
     predictions = Dense(num_classes, activation='softmax')(x)
     model = Model(inputs=base_model.input, outputs=predictions)
@@ -129,7 +130,7 @@ if __name__ == '__main__':
 
     # wheere to save weights , dataset & training details change if needed
     data_set = 'CIFAR-100'
-    training_type = 'distance_classifier'  # options 'crossentropy_classifier', 'distance_classifier'
+    training_type = 'crossentropy_classifier'  # options 'crossentropy_classifier', 'distance_classifier'
     arch = 'inception_resnet_v2'
     weights_folder = f'./results/{training_type}s_{arch}_{data_set}'
     os.makedirs(weights_folder, exist_ok=True)
@@ -176,7 +177,7 @@ if __name__ == '__main__':
         print('SVHN suggested arch chosen, optimizer adam')
     else:
         if arch == 'inception_resnet_v2':
-            input_size = (224, 224, 3)
+            input_size = (96, 96, 3)
             my_classifier = build_inception_resnet_classifier(input_size)
             preprocess_input_fun = inception_resnet_v2.preprocess_input
             print('chose inception recent v2 arch')
