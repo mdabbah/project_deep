@@ -5,7 +5,6 @@ from keras.utils import np_utils
 from sklearn.metrics import classification_report, roc_auc_score
 import numpy as np
 from train_distance_based import distance_loss
-import distance_classifier
 import os.path
 
 
@@ -101,19 +100,32 @@ if __name__ == '__main__':
     # exp_name = 'distance trained model, SR predicted, confidence '
 
     # cifar 10 models
-    dataset_name = 'cifar10'
+    # dataset_name = 'cifar10'
     # model_name = './results/crossentropy_classifiers_CIFAR-10/crossentropy_classifier_ 147_0.899_0.564_0.983_0.227.h5'
     # exp_name = 'ce  trained model, SR predicted'
-    model_name = './results/distance_classifiers_CIFAR-10/distance_classifier_ 165_0.907_1.350_0.986_0.556.h5'
+    # model_name = './results/distance_classifiers_CIFAR-10/distance_classifier_ 165_0.907_1.350_0.986_0.556.h5'
+    # exp_name = 'ce  trained model, SR predicted'
+
+    # cifar 10 models
+    dataset_name = 'svhn'
+    model_name = './results/crossentropy_classifiers_SVHN/crossentropy_classifier_ 20_0.919_0.363_0.933_0.315.h5'
     exp_name = 'ce  trained model, SR predicted'
+    # model_name = './results/distance_classifiers_SVHN/distance_classifier_ 24_0.917_0.921_0.934_0.860.h5'
+    # exp_name = 'svhn distance  trained model, SR predicted'
 
     # loading data
     if dataset_name == 'cifar10':
         import cifar10_data_generator as data_genetator  # choose data set
+        import distance_classifier
         print("eval. on cifar10")
     elif dataset_name == 'cifar100':
         import cifar100_data_generator as data_genetator  # choose data set
+        import distance_classifier
         print("eval. on cifar100")
+    elif dataset_name == 'svhn':
+        import svhn_data_generator as data_genetator  # choose data set
+        import SVHN_arch_classifier as distance_classifier
+        print("eval. on svhn")
 
     #  'max margin'  , 'distance' , 'negative entropy'
     confidence_score = 'distance'

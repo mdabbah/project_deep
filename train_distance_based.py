@@ -1,4 +1,5 @@
 import numpy as np
+from keras import Model
 from keras.callbacks import ModelCheckpoint
 from keras.callbacks import ReduceLROnPlateau
 from keras.callbacks import CSVLogger
@@ -6,8 +7,9 @@ from keras.callbacks import EarlyStopping
 from keras.callbacks import LearningRateScheduler
 import keras.backend as K
 import tensorflow as tf
+from keras.layers import Dense, Flatten
 from keras.optimizers import Adam, SGD
-from keras.applications.vgg16 import VGG16
+import keras.applications.inception_resnet_v2 as inception_resnet_v2
 import os
 
 
@@ -24,7 +26,7 @@ def lr_scheduler_maker(dataset_name: str, scheduling_dictionary: dict =None):
     you can also just define the transitional epochs in this dictionary
     :return: lr_scheduler function to be passed to LearningRateScheduler object
     """
-    if dataset_name == 'cifar100':
+    if dataset_name.startswith('CIFAR-10'):
         lr_cache = lr_cache_cifar100
     elif dataset_name == 'stl10':
         lr_cache = lr_cache_stl10
@@ -34,7 +36,7 @@ def lr_scheduler_maker(dataset_name: str, scheduling_dictionary: dict =None):
         Warning('supported datasets are cifar100, and stl10, will be using'
                 ' the scheduling_dictionary ')
         if scheduling_dictionary is None:
-            ValueError('bad parameters: no scheduling dict was passed')
+            raise ValueError('bad parameters: no scheduling dict was passed')
         lr_cache = scheduling_dictionary
 
     def lr_scheduler(epoch, current_lr):
@@ -66,7 +68,7 @@ def distance_loss(encodeing_layer, batch_size=100, distance_margin = 25, distanc
     print("generating distance loss function ...")
     def loss(y_true, y_pred):
 
-
+        # batch_size = int(y_true.shape[0])
         embeddings = encodeing_layer.output
         eps = 0.0015
         # calculate the embeddings distance from each other in the current batch
@@ -84,31 +86,54 @@ def distance_loss(encodeing_layer, batch_size=100, distance_margin = 25, distanc
 
         # boolean matrix s.t. in entry (i,j) is 1 iff label_i == label_j
         y_eq = tf.matmul(y_true, tf.transpose(y_true))
-        num_pairs = batch_size**2
+        num_pairs = tf.cast((tf.shape(y_eq)[0])**2, tf.float32)
         print_op = tf.print("eq. pairs percentage: ", tf.reduce_sum(y_eq)/num_pairs)  # print how manny pairs are equal
+        print_batch_sz = tf.print("num pairs", num_pairs)
 
         # the proposed distance loss
-        distance_loss_eq = tf.reduce_sum(tf.boolean_mask(norms, y_eq - tf.eye(batch_size)))/num_pairs  # loss for pairs with the same label
+        distance_loss_eq = tf.reduce_sum(tf.boolean_mask(norms, y_eq - tf.eye(tf.shape(y_eq)[0], dtype=tf.float32)))/num_pairs  # loss for pairs with the same label
         distance_loss_diff = tf.reduce_sum(tf.maximum(0., distance_margin - tf.boolean_mask(norms, 1-y_eq)))/num_pairs  # loss for pairs with different label
         # print them
         print_op2 = tf.print("loss equals: ", distance_loss_eq)
         print_op3 = tf.print("loss diff: ", distance_loss_diff)
 
         total_loss += (distance_loss_eq + distance_loss_diff) * distance_loss_coeff
-        with tf.control_dependencies([print_op, print_op2, print_op3]):
+        with tf.control_dependencies([print_op, print_op2, print_op3, print_batch_sz]):
             return total_loss
 
     return loss
 
 
+def build_inception_resnet_classifier(input_size=(96, 96, 3)):
+    num_classes = data_genetator.nb_classes
+    base_model = inception_resnet_v2.InceptionResNetV2(include_top=False, input_shape=input_size,
+                                                       classes=num_classes)
+
+    x = base_model.output
+    # let's add a fully-connected layer for embedding
+    x = Dense(300, activation='relu')(x)
+    x = Flatten(name='embedding')(x)
+    # and a prediction layer
+    predictions = Dense(num_classes, activation='softmax')(x)
+    model = Model(inputs=base_model.input, outputs=predictions)
+
+    # first: train only the top layers (which were randomly initialized)
+    # i.e. freeze all convolutional InceptionV3 layers
+    for layer in model.layers[:-10]:
+        layer.trainable = False
+
+    return model
+
+
 if __name__ == '__main__':
 
     # wheere to save weights , dataset & training details change if needed
-    data_set = 'SVHN'
-    training_type = 'crossentropy_classifier'  # options 'crossentropy_classifier', 'distance_classifier'
-    weights_folder = f'./results/{training_type}s_{data_set}'
+    data_set = 'CIFAR-100'
+    training_type = 'distance_classifier'  # options 'crossentropy_classifier', 'distance_classifier'
+    arch = 'inception_resnet_v2'
+    weights_folder = f'./results/{training_type}s_{arch}_{data_set}'
     os.makedirs(weights_folder, exist_ok=True)
-    weights_file = f'{weights_folder}/{training_type}' \
+    weights_file = f'{weights_folder}/{training_type}_{arch}' \
                    '_{epoch: 03d}_{val_acc:.3f}_{val_loss:.3f}_{acc:.3f}_{loss:.3f}.h5'
 
     # callbacks change if needed
@@ -140,10 +165,8 @@ if __name__ == '__main__':
     input_size = (32, 32, 3)
     num_training_xsamples_per_epoch = data_genetator.X_train.shape[0] // batch_size
     num_validation_xsamples_per_epoch = data_genetator.X_valid.shape[0] // batch_size
-
-    # data generators
-    my_training_generator = data_genetator.MYGenerator(data_type='train', batch_size=batch_size, shuffle=shuffle)
-    my_validation_generator = data_genetator.MYGenerator(data_type='valid', batch_size=batch_size, shuffle=shuffle)
+    my_classifier = None
+    preprocess_input_fun = None
 
     # choosing arch and optimizer
     if data_set.startswith('SVHN'):
@@ -152,13 +175,27 @@ if __name__ == '__main__':
         num_epochs = 26
         print('SVHN suggested arch chosen, optimizer adam')
     else:
-        import distance_classifier
+        if arch == 'inception_resnet_v2':
+            input_size = (224, 224, 3)
+            my_classifier = build_inception_resnet_classifier(input_size)
+            preprocess_input_fun = inception_resnet_v2.preprocess_input
+            print('chose inception recent v2 arch')
+        else:
+            import distance_classifier
+            print('cifar100 suggested arch chosen, optimizer SGD w. momentum')
         optimizer = SGD(lr=1e-2, momentum=0.9)
         num_epochs = 180
-        print('cifar100 suggested arch chosen, optimizer SGD w. momentum')
+
+    # data generators
+    my_training_generator = data_genetator.MYGenerator(data_type='train', batch_size=batch_size, shuffle=shuffle,
+                                                       input_size=input_size, preprocessing_fun=preprocess_input_fun)
+    my_validation_generator = data_genetator.MYGenerator(data_type='valid', batch_size=batch_size, shuffle=shuffle,
+                                                         input_size=input_size, preprocessing_fun=preprocess_input_fun)
 
     # creating the classification model and compiling it
-    my_classifier = distance_classifier.DistanceClassifier(input_size, num_classes=data_genetator.nb_classes)
+    if my_classifier is None:
+        my_classifier = distance_classifier.DistanceClassifier(input_size, num_classes=data_genetator.nb_classes)
+
     encoder = my_classifier.get_layer('embedding')
     loss_function = \
         distance_loss(encoder, batch_size) if training_type.startswith('distance') else K.categorical_crossentropy
@@ -175,7 +212,8 @@ if __name__ == '__main__':
                                 workers=1,
                                 use_multiprocessing=0)
 
-    test_generator = data_genetator.MYGenerator(data_type='test', batch_size=batch_size, shuffle=True)
+    test_generator = data_genetator.MYGenerator(data_type='test', batch_size=batch_size, shuffle=True,
+                                                input_size=input_size, preprocessing_fun=preprocess_input_fun)
 
     # check acc
     loss, acc = my_classifier.evaluate_generator(test_generator,

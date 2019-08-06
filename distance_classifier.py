@@ -3,7 +3,6 @@ import keras.models as models
 from keras import regularizers
 
 
-
 def DistanceClassifier(input_size, num_classes):
 
     img_input = Input(shape=input_size)

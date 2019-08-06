@@ -1,12 +1,10 @@
 import os
-
 import keras
 from keras.datasets import cifar100
 from keras.utils import np_utils
 import numpy as np
 from keras_preprocessing.image import ImageDataGenerator
-from itertools import count
-from sklearn.metrics import roc_auc_score
+from skimage.transform import resize
 
 # load data
 (X_train, y_train), (X_test, y_test) = cifar100.load_data()
@@ -59,12 +57,6 @@ def rearrange_samples(X_train, Y_train, nb_classes):
 np.random.seed(0)
 X_train, Y_train = rearrange_samples(X_train, Y_train, nb_classes)
 
-# subtract mean and normalize
-mean_image = np.mean(X_train, axis=0)
-X_train -= mean_image
-X_test -= mean_image
-X_train /= 128.
-X_test /= 128.
 
 # split data for validation
 num_training_samples = int(X_train.shape[0]*0.9)
@@ -88,15 +80,17 @@ datagen = ImageDataGenerator(
     horizontal_flip=True,  # randomly flip images
     vertical_flip=False)  # randomly flip images
 
-# Compute quantities required for featurewise normalization
-# (std, mean, and principal components if ZCA whitening is applied).
-datagen.fit(X_train)
+
+def identity_preprocessing(x):
+    return x
 
 
 class MYGenerator(keras.utils.Sequence):
 
-    def __init__(self, data_type: str, batch_size: int = 100, shuffle: bool = False):
+    def __init__(self, data_type: str, batch_size: int = 100, shuffle: bool = False,
+                 preprocessing_fun=None, input_size=(32, 32, 3)):
 
+        global X_train, X_test, X_valid
         if data_type == 'train':
             self.imgs = X_train
             self.labels = Y_train
@@ -106,6 +100,24 @@ class MYGenerator(keras.utils.Sequence):
         else:
             self.imgs = X_test
             self.labels = Y_test
+
+        if preprocessing_fun is None:
+            # subtract mean and normalize -- global preprocessing
+            mean_image = np.mean(X_train, axis=0)
+            X_train -= mean_image
+            X_valid -= mean_image
+            X_test -= mean_image
+            X_train /= 128.
+            X_valid /= 128.
+            X_test /= 128.
+            preprocessing_fun = identity_preprocessing
+
+            # Compute quantities required for featurewise normalization
+            # (std, mean, and principal components if ZCA whitening is applied).
+            datagen.fit(X_train)
+
+        self.pre_processing_fun = preprocessing_fun
+        self.img_size = input_size
 
         if shuffle:
             size = self.imgs.shape[0]
@@ -120,9 +132,10 @@ class MYGenerator(keras.utils.Sequence):
 
     def __getitem__(self, idx):
 
-        batch_x = next(datagen.flow(self.imgs[idx * self.batch_size: (idx + 1) * self.batch_size]
-                                    , None, batch_size=self.batch_size, shuffle=False))\
+        batch_x = self.imgs[idx * self.batch_size: (idx + 1) * self.batch_size]
+        if self.pre_processing_fun == identity_preprocessing:
+            batch_x = next(datagen.flow(batch_x, None, batch_size=self.batch_size, shuffle=False))
 
         batch_y = self.labels[idx * self.batch_size: (idx + 1) * self.batch_size, :]
 
-        return batch_x, batch_y
+        return resize(self.pre_processing_fun(batch_x), (batch_x.shape[0], *self.img_size)), batch_y
