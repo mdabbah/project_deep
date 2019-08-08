@@ -57,6 +57,12 @@ def rearrange_samples(X_train, Y_train, nb_classes):
 np.random.seed(0)
 X_train, Y_train = rearrange_samples(X_train, Y_train, nb_classes)
 
+mean_image = np.mean(X_train, axis=0)
+X_train -= mean_image
+X_test -= mean_image
+X_train /= 128.
+X_test /= 128.
+
 
 # split data for validation
 num_training_samples = int(X_train.shape[0]*0.9)
@@ -80,6 +86,10 @@ datagen = ImageDataGenerator(
     horizontal_flip=True,  # randomly flip images
     vertical_flip=False)  # randomly flip images
 
+# Compute quantities required for featurewise normalization
+# (std, mean, and principal components if ZCA whitening is applied).
+datagen.fit(X_train)
+
 
 def identity_preprocessing(x):
     return x
@@ -102,19 +112,7 @@ class MYGenerator(keras.utils.Sequence):
             self.labels = Y_test
 
         if preprocessing_fun is None:
-            # subtract mean and normalize -- global preprocessing
-            mean_image = np.mean(X_train, axis=0)
-            X_train -= mean_image
-            X_valid -= mean_image
-            X_test -= mean_image
-            X_train /= 128.
-            X_valid /= 128.
-            X_test /= 128.
             preprocessing_fun = identity_preprocessing
-
-            # Compute quantities required for featurewise normalization
-            # (std, mean, and principal components if ZCA whitening is applied).
-            datagen.fit(X_train)
 
         self.pre_processing_fun = preprocessing_fun
         self.img_size = input_size

@@ -10,6 +10,7 @@ import tensorflow as tf
 from keras.layers import Dense, Flatten
 from keras.optimizers import Adam, SGD
 import keras.applications.inception_resnet_v2 as inception_resnet_v2
+from keras_contrib.applications.resnet import ResNet18
 import os
 
 
@@ -105,6 +106,12 @@ def distance_loss(encodeing_layer, batch_size=100, distance_margin = 25, distanc
 
 
 def build_inception_resnet_classifier(input_size=(96, 96, 3)):
+    """
+    takes the base inception resnet arch cuts the top off and adds 2 more dense layers
+    one for embedding and one for the final classification
+    :param input_size: the input size of the network
+    :return: a keras Model
+    """
     num_classes = data_genetator.nb_classes
     base_model = inception_resnet_v2.InceptionResNetV2(include_top=False, input_shape=input_size,
                                                        classes=num_classes, pooling='avg')
@@ -131,7 +138,7 @@ if __name__ == '__main__':
     # wheere to save weights , dataset & training details change if needed
     data_set = 'CIFAR-100'
     training_type = 'crossentropy_classifier'  # options 'crossentropy_classifier', 'distance_classifier'
-    arch = 'inception_resnet_v2'
+    arch = 'ResNet18'
     weights_folder = f'./results/{training_type}s_{arch}_{data_set}'
     os.makedirs(weights_folder, exist_ok=True)
     weights_file = f'{weights_folder}/{training_type}_{arch}' \
@@ -176,15 +183,22 @@ if __name__ == '__main__':
         num_epochs = 26
         print('SVHN suggested arch chosen, optimizer adam')
     else:
-        if arch == 'inception_resnet_v2':
+        if arch == 'ResNet18':
+            my_classifier = ResNet18(input_size, data_genetator.nb_classes)
+            my_classifier.layers[-3].name = 'embedding'
+            print('chose resnet18v2 arch')
+            optimizer = 'adam'
+        elif arch == 'inception_resnet_v2':
             input_size = (96, 96, 3)
             my_classifier = build_inception_resnet_classifier(input_size)
             preprocess_input_fun = inception_resnet_v2.preprocess_input
-            print('chose inception recent v2 arch')
+            print('chose inception resent v2 arch')
+            optimizer = SGD(lr=1e-2, momentum=0.9)
+
         else:
             import distance_classifier
             print('cifar100 suggested arch chosen, optimizer SGD w. momentum')
-        optimizer = SGD(lr=1e-2, momentum=0.9)
+            optimizer = SGD(lr=1e-2, momentum=0.9)
         num_epochs = 180
 
     # data generators
