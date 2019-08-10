@@ -39,6 +39,7 @@ def lr_scheduler_maker(dataset_name: str, scheduling_dictionary: dict =None):
         if scheduling_dictionary is None:
             raise ValueError('bad parameters: no scheduling dict was passed')
         lr_cache = scheduling_dictionary
+    print(f'chosen lr scheduling is:{lr_cache}')
 
     def lr_scheduler(epoch, current_lr):
         """
@@ -166,6 +167,7 @@ if __name__ == '__main__':
         print("training on SVHN")
 
     # training constants, change if needed
+    num_epochs = 180
     batch_size = 100
     distance_margin = 25
     distance_loss_coeff = 0.2
@@ -187,19 +189,24 @@ if __name__ == '__main__':
             my_classifier = ResNet18(input_size, data_genetator.nb_classes)
             my_classifier.layers[-3].name = 'embedding'
             print('chose resnet18v2 arch')
+            # optimizer = SGD(lr=0.1, momentum=0.9, nesterov=True)
+            num_epochs = 200
+            my_callbacks[-1] = LearningRateScheduler(lr_scheduler_maker('', scheduling_dictionary={60: 0.1/5, 120: 0.1/25, 180: 0.1/125}))
+            del my_callbacks[-1]
             optimizer = 'adam'
+            shuffle = True
         elif arch == 'inception_resnet_v2':
             input_size = (96, 96, 3)
             my_classifier = build_inception_resnet_classifier(input_size)
             preprocess_input_fun = inception_resnet_v2.preprocess_input
             print('chose inception resent v2 arch')
-            optimizer = SGD(lr=1e-2, momentum=0.9)
+            optimizer = SGD(lr=1e-2, momentum=0.9, nesterov=True)
 
         else:
             import distance_classifier
             print('cifar100 suggested arch chosen, optimizer SGD w. momentum')
             optimizer = SGD(lr=1e-2, momentum=0.9)
-        num_epochs = 180
+
 
     # data generators
     my_training_generator = data_genetator.MYGenerator(data_type='train', batch_size=batch_size, shuffle=shuffle,

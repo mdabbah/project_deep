@@ -3,7 +3,7 @@ import keras.models as models
 from keras import regularizers
 
 
-def DistanceClassifier(input_size, num_classes):
+def DistanceClassifier(input_size, num_classes, include_top=True):
 
     img_input = Input(shape=input_size)
 
@@ -57,7 +57,9 @@ def DistanceClassifier(input_size, num_classes):
     x = Flatten(name='embedding')(x)
     x = LeakyReLU(alpha=0.2)(x)
     x = Dropout(0.5)(x)
-    x = Dense(num_classes, activation='softmax')(x)
+
+    if include_top:
+        x = Dense(num_classes, activation='softmax')(x)
 
     # Create model.
     model = models.Model(img_input, x, name='distance_predictor')

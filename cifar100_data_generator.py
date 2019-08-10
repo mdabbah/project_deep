@@ -131,9 +131,11 @@ class MYGenerator(keras.utils.Sequence):
     def __getitem__(self, idx):
 
         batch_x = self.imgs[idx * self.batch_size: (idx + 1) * self.batch_size]
-        if self.pre_processing_fun == identity_preprocessing:
-            batch_x = next(datagen.flow(batch_x, None, batch_size=self.batch_size, shuffle=False))
+        # if self.pre_processing_fun == identity_preprocessing:
+        #     batch_x = next(datagen.flow(batch_x, None, batch_size=self.batch_size, shuffle=False))
 
+        batch_x = next(datagen.flow(batch_x, None, batch_size=self.batch_size, shuffle=False))
         batch_y = self.labels[idx * self.batch_size: (idx + 1) * self.batch_size, :]
 
-        return resize(self.pre_processing_fun(batch_x), (batch_x.shape[0], *self.img_size)), batch_y
+        # return resize(self.pre_processing_fun(batch_x), (batch_x.shape[0], *self.img_size)), batch_y
+        return batch_x, batch_y
