@@ -29,7 +29,7 @@ class MYGenerator(keras.utils.Sequence):
         self.images = data['Image']
         # images between 0-1  array of size num_samples X 96*96 X 3
         self.images = np.array([np.fromstring(i, sep=' ') for i in self.images])/255.
-        self.images = self.images.reshape([-1, 1, *self.image_dims[:2] ]).repeate(repeats=3, axis=1).transpose([0, 2, 3, 1])
+        self.images = self.images.reshape([-1, 1, *self.image_dims[:2] ]).repeat(repeats=3, axis=1).transpose([0, 2, 3, 1])
 
         # those are the 'labels' for regression .. we shift them to be between [-1,1]
         self.key_points = (np.array(data.drop(columns=['Image'])) - self.image_dims[0]/2)/(self.image_dims[0]/2)
@@ -72,8 +72,8 @@ class MYGenerator(keras.utils.Sequence):
                 batch_y[samples_to_flip, a], batch_y[samples_to_flip, b] = (
                     batch_y[samples_to_flip, b], batch_y[samples_to_flip, a])
 
-            batch_y[samples_to_flip] = batch_y[samples_to_flip, ::2]*-1  # times -1 to flip, since y is centered[-1,1]
+            batch_y[samples_to_flip, ::2] = batch_y[samples_to_flip, ::2]*-1  # times -1 to flip, since y is centered[-1,1]
 
-            batch_x[samples_to_flip] = batch_x[samples_to_flip, :, ::-1, :]
+            batch_x[samples_to_flip, :, :, :] = batch_x[samples_to_flip, :, ::-1, :]
 
         return batch_x, batch_y
