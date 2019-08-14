@@ -3,13 +3,13 @@ import numpy as np
 import keras
 
 
-TRAIN_FILE_PATH_WITH_NANS = './data/regression/facial_keypoints/train_with_nans.csv'
+TRAIN_FILE_PATH_WITH_NANS = './data/regression/facial_keypoints/train_with_nans_0.8.csv'
 TRAIN_FILE_PATH_NO_NANS = './data/regression/facial_keypoints/train_no_nans.csv'
 
-VALID_FILE_PATH_WITH_NANS = './data/regression/facial_keypoints/valid_with_nans.csv'
+VALID_FILE_PATH_WITH_NANS = './data/regression/facial_keypoints/valid_with_nans_0.1.csv'
 VALID_FILE_PATH_NO_NANS = './data/regression/facial_keypoints/valid_no_nans.csv'
 
-TEST_FILE_PATH = './data/regression/facial_keypoints/test.csv'
+TEST_FILE_PATH = './data/regression/facial_keypoints/test_with_nans_0.1.csv'
 
 
 class MYGenerator(keras.utils.Sequence):

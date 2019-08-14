@@ -29,6 +29,7 @@ def distance_loss(encodeing_layer, batch_size=100, distance_margin = 25, distanc
         y_true = tf.where(tf.is_nan(y_true), tf.zeros_like(y_true), y_true)
         y_pred = tf.where(tf.is_nan(y_true), tf.zeros_like(y_true), y_pred)
 
+
         eps = 0.0015
         # calculate the embeddings distance from each other in the current batch
         # norms = tf.norm(K.expand_dims(embeddings, 0) - tf.expand_dims(embeddings, 1), axis=2)
@@ -84,21 +85,23 @@ def MSE_updated(y_true, y_pred):
     mask = 1-tf.cast(tf.is_nan(y_true), tf.float32)
     num_non_nans = tf.reduce_sum(mask, axis=-1)
     mask = ~tf.is_nan(y_true)
+    y_true = tf.where(tf.is_nan(y_true), tf.zeros_like(y_true), y_true)  # to avoid nan gradients when using tf.where
 
     squared_loss = tf.square(y_true-y_pred)
     squared_loss_filtered = tf.where(mask, squared_loss, tf.zeros_like(mask, dtype=tf.float32))
 
     total_loss = tf.math.divide(tf.reduce_sum(squared_loss_filtered, axis=-1), num_non_nans)
 
-    # debugging mse updated
-    # print_non_nans = tf.print('num_non_nans:\n', tf.reduce_sum(num_non_nans))
+    # # debugging mse updated
+    # print_non_nans = tf.print('\nmin num_non_nans:\n', tf.reduce_min(num_non_nans))
+    #
     # orig_mse_print_node = tf.print('orig mse:\n', MSE(y_true, y_pred))
     # my_mse_print_node = tf.print('my mse:\n', total_loss)
-    # print_node = tf.print('IS EQUAL == ', 1 - tf.math.reduce_sum(tf.math.abs(MSE(y_true, y_pred)- total_loss)))
+    # print_node = tf.print('IS EQUAL == \n', 1 - tf.math.reduce_sum(tf.math.abs(MSE(y_true, y_pred)- total_loss)))
     # with tf.control_dependencies([print_node, print_non_nans, my_mse_print_node, orig_mse_print_node]):
     #     return tf.math.reduce_mean(total_loss)+ 0.
 
-    return  tf.math.reduce_mean(total_loss)
+    return tf.math.reduce_mean(total_loss)
 
 
 if __name__ == '__main__':
@@ -110,7 +113,7 @@ if __name__ == '__main__':
     weights_folder = f'./results/regression/{training_type}s_{arch}_{data_set}'
     os.makedirs(weights_folder, exist_ok=True)
     weights_file = f'{weights_folder}/{training_type}_{arch}' \
-                   '_{epoch: 03d}_{val_loss:.3f}_{loss:.3f}_{mean_squared_error:.5f}_{val_mean_squared_error: .5f}.h5'
+                   '_{epoch: 03d}_{val_loss:.3f}_{loss:.3f}_{MSE_updated:.5f}_{val_MSE_updated: .5f}.h5'
 
     # callbacks change if needed
     lr_reducer = ReduceLROnPlateau(factor=np.sqrt(0.1), cooldown=0,
@@ -119,8 +122,8 @@ if __name__ == '__main__':
     # lr_scheduler_callback = LearningRateScheduler(lr_scheduler_maker(data_set))
     early_stopper = EarlyStopping(min_delta=0.001, patience=20)
     csv_logger = CSVLogger(f'{training_type}-{data_set}-{arch}.csv')
-    model_checkpoint = ModelCheckpoint(weights_file, monitor='val_loss', save_best_only=True,
-                                       save_weights_only=True, mode='auto')
+    model_checkpoint = ModelCheckpoint(weights_file, monitor='val_MSE_updated', save_best_only=True,
+                                       save_weights_only=True, mode='min')
     my_callbacks = [csv_logger, model_checkpoint] # lr_scheduler_callback , lr_reducer, early_stopper]
 
     # loading data
@@ -138,7 +141,7 @@ if __name__ == '__main__':
     shuffle = True
     input_size = (96, 96, 3)
     my_regressor = None
-    use_nans = False
+    use_nans = True
 
     # choosing arch and optimizer
     if data_set.startswith('facial'):
@@ -163,7 +166,7 @@ if __name__ == '__main__':
     loss_function = \
         distance_loss(encoder, batch_size) if training_type.startswith('distance') else MSE_updated
 
-    my_regressor.compile(optimizer=optimizer, loss=loss_function, metrics=['MSE'])
+    my_regressor.compile(optimizer=optimizer, loss=loss_function, metrics=[MSE_updated])
 
     # start training
     my_regressor.fit_generator(my_training_generator,
