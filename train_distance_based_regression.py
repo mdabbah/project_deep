@@ -12,7 +12,7 @@ from keras.losses import MSE
 import os
 
 
-def distance_loss(encodeing_layer, batch_size=100, distance_margin = 25, distance_loss_coeff = 0.2):
+def distance_loss(encodeing_layer, batch_size=32, distance_margin = 25, distance_loss_coeff = 0.2):
     """
     the loss function that depends on the encoding of the second to last layer
     as suggested by
@@ -22,28 +22,33 @@ def distance_loss(encodeing_layer, batch_size=100, distance_margin = 25, distanc
     :return: loss function
     """
     print("generating distance loss function ...")
+
     def loss(y_true, y_pred):
 
         # batch_size = int(y_true.shape[0])
         embeddings = encodeing_layer.output
-        y_true = tf.where(tf.is_nan(y_true), tf.zeros_like(y_true), y_true)
-        y_pred = tf.where(tf.is_nan(y_true), tf.zeros_like(y_true), y_pred)
 
+        # filter out embeddings that had no associated regression target
+        is_nan_mask = tf.is_nan(y_true)
+        num_repeats = tf.shape(embeddings)[-1]//tf.shape(y_true)[-1]
 
-        eps = 0.0015
+        y_true = tf.where(is_nan_mask, tf.zeros_like(y_true), y_true)
+        y_pred = tf.where(is_nan_mask, tf.zeros_like(y_true), y_pred)
+
         # calculate the embeddings distance from each other in the current batch
-        # norms = tf.norm(K.expand_dims(embeddings, 0) - tf.expand_dims(embeddings, 1), axis=2)
-        norms = tf.reduce_sum(tf.squared_difference(K.expand_dims(embeddings, 0), tf.expand_dims(embeddings, 1)), axis=2)
-        # norms = tf.sqrt(norms + eps)
+        squared_dists = tf.reduce_sum(tf.reshape(tf.squared_difference(K.expand_dims(embeddings, 0),
+                                                                       tf.expand_dims(embeddings, 1)),
+                                                 shape=(batch_size, batch_size, -1, num_repeats)), axis=-1)
 
-        # no sqrt implementation:
-        # norms = tf.reduce_sum(tf.squared_difference(K.expand_dims(embeddings, 0), tf.expand_dims(embeddings, 1)), axis=2)
+        # filter embedding parts where label isn't well defined
+        is_nan_mask = tf.logical_or(tf.expand_dims(is_nan_mask, 0), tf.expand_dims(is_nan_mask, 1))
+        squared_dists = tf.where(is_nan_mask, tf.zeros_like(squared_dists), squared_dists)
 
         # the original classification loss
         total_loss = MSE_updated(y_true, y_pred)
 
         # the proposed distance loss
-        distance_loss_eq = tf.reduce_mean(norms)
+        distance_loss_eq = tf.reduce_sum(squared_dists)
         # print them
         print_op2 = tf.print("loss equals: ", distance_loss_eq)
 
@@ -74,7 +79,7 @@ def l1_smooth_loss_updated(y_true, y_pred):
     return tf.math.reduce_mean(total_loss)
 
 
-def MSE_updated(y_true, y_pred):
+def MSE_updated(y_true, y_pred, return_vec:bool = False):
     """
     same as MSE but ignores cells where y_true is nan
     :param y_true: true regression numbers
@@ -82,13 +87,13 @@ def MSE_updated(y_true, y_pred):
     :return:
     """
 
-    mask = 1-tf.cast(tf.is_nan(y_true), tf.float32)
+    mask = 1-tf.cast(tf.is_nan(y_true), y_true.dtype)
     num_non_nans = tf.reduce_sum(mask, axis=-1)
     mask = ~tf.is_nan(y_true)
     y_true = tf.where(tf.is_nan(y_true), tf.zeros_like(y_true), y_true)  # to avoid nan gradients when using tf.where
 
     squared_loss = tf.square(y_true-y_pred)
-    squared_loss_filtered = tf.where(mask, squared_loss, tf.zeros_like(mask, dtype=tf.float32))
+    squared_loss_filtered = tf.where(mask, squared_loss, tf.zeros_like(mask, dtype=y_true.dtype))
 
     total_loss = tf.math.divide(tf.reduce_sum(squared_loss_filtered, axis=-1), num_non_nans)
 
@@ -100,7 +105,8 @@ def MSE_updated(y_true, y_pred):
     # print_node = tf.print('IS EQUAL == \n', 1 - tf.math.reduce_sum(tf.math.abs(MSE(y_true, y_pred)- total_loss)))
     # with tf.control_dependencies([print_node, print_non_nans, my_mse_print_node, orig_mse_print_node]):
     #     return tf.math.reduce_mean(total_loss)+ 0.
-
+    if return_vec:
+        return total_loss
     return tf.math.reduce_mean(total_loss)
 
 

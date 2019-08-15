@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import keras
-
+from skimage.transform import AffineTransform, warp
 
 TRAIN_FILE_PATH_WITH_NANS = './data/regression/facial_keypoints/train_with_nans_0.8.csv'
 TRAIN_FILE_PATH_NO_NANS = './data/regression/facial_keypoints/train_no_nans.csv'
@@ -12,10 +12,17 @@ VALID_FILE_PATH_NO_NANS = './data/regression/facial_keypoints/valid_no_nans.csv'
 TEST_FILE_PATH = './data/regression/facial_keypoints/test_with_nans_0.1.csv'
 
 
+def shift(image, vector):
+    transform = AffineTransform(translation=vector)
+    shifted = warp(image, transform, mode='wrap', preserve_range=True)
+
+    shifted = shifted.astype(image.dtype)
+    return  shifted
+
 class MYGenerator(keras.utils.Sequence):
 
-    def __init__(self, data_type: str, batch_size: int = 100, shuffle: bool = False,
-                 use_nans=False, horizontal_flip_prob=0.5, jitterx_limits=(), jittery_limits=()):
+    def __init__(self, data_type: str, batch_size: int = 32, shuffle: bool = False,
+                 use_nans=True, horizontal_flip_prob=0.5, jitterx_limits=(), jittery_limits=()):
 
         if data_type == 'train':
             data = pd.read_csv(TRAIN_FILE_PATH_WITH_NANS) if use_nans else pd.read_csv(TRAIN_FILE_PATH_NO_NANS)
@@ -25,14 +32,15 @@ class MYGenerator(keras.utils.Sequence):
             data = pd.read_csv(TEST_FILE_PATH)
 
         self.image_dims = 96, 96, 3
+        self.dataset_name = 'facial_keypoints'
 
         self.images = data['Image']
         # images between 0-1  array of size num_samples X 96*96 X 3
         self.images = np.array([np.fromstring(i, sep=' ') for i in self.images])/255.
-        self.images = self.images.reshape([-1, 1, *self.image_dims[:2] ]).repeat(repeats=3, axis=1).transpose([0, 2, 3, 1])
+        self.images = self.images.reshape([-1, 1, *self.image_dims[:2]]).repeat(repeats=3, axis=1).transpose([0, 2, 3, 1])
 
         # those are the 'labels' for regression .. we shift them to be between [-1,1]
-        self.key_points = (np.array(data.drop(columns=['Image'])) - self.image_dims[0]/2)/(self.image_dims[0]/2)
+        self.key_points = self.labels = (np.array(data.drop(columns=['Image'])) - self.image_dims[0]/2)/(self.image_dims[0]/2)
 
         #  this is for the stupidly complicated flipping --
         #  idea is that the right eye is now the left one and vice versa

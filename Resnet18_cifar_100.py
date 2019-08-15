@@ -1,9 +1,10 @@
 import os
 
-from keras.callbacks import CSVLogger, ModelCheckpoint
+from keras.callbacks import CSVLogger, ModelCheckpoint, LearningRateScheduler
 from keras.datasets import cifar100
+from keras.optimizers import SGD
 from keras_contrib.applications import ResNet18
-from distance_classifier import  DistanceClassifier
+from distance_classifier import DistanceClassifier
 from keras.applications import Xception
 from keras.utils import np_utils
 import numpy as np
@@ -64,11 +65,11 @@ num_epochs = 200
 training_generator = datagen.flow(X_train, Y_train, batch_size=batch_size, shuffle=True)
 validation_generator = datagen.flow(X_valid, Y_valid, batch_size=batch_size, shuffle=True)
 
-my_classifier = DistanceClassifier(input_size=(32, 32, 3), num_classes=100)
-
+my_classifier = ResNet18((32, 32, 3), 100)
+optimizer = SGD(lr=0.1, momentum=0.9, nesterov=True)
 my_classifier.compile(optimizer='adam', loss=categorical_crossentropy, metrics=['accuracy'])
 
-weights_folder = './new_arch_exp'
+weights_folder = './resnet18_exp_sgd_weightdecay'
 
 os.makedirs(weights_folder, exist_ok=True)
 weights_file = f'{weights_folder}/' \
@@ -79,7 +80,20 @@ csv_logger = CSVLogger(f'{weights_folder}.csv')
 model_checkpoint = ModelCheckpoint(weights_file, monitor='val_acc', save_best_only=True,
                                    save_weights_only=True, mode='auto')
 
-my_callbacks = [csv_logger, model_checkpoint]  # lr_scheduler_callback , lr_reducer, early_stopper]
+
+def lr_scheduler(epoch, current_lr):
+    """
+    the function used to decrease the learning rate as suggested by
+    "Distance-based Confidence Score for Neural Network Classifiers"
+    https://arxiv.org/abs/1709.09844
+    :param epoch: the current epoch
+    :param current_lr: the current learning rate
+    :return: the new learning rate
+    """
+    return current_lr / 5 ** (epoch // 60)
+
+
+my_callbacks = [csv_logger, model_checkpoint, LearningRateScheduler(lr_scheduler)]  # lr_scheduler_callback , lr_reducer, early_stopper]
 
 # start training
 my_classifier.fit_generator(training_generator,

@@ -52,7 +52,7 @@ def negative_entropy(y_pred):
     return negative_entropy_vec
 
 
-def pickle_embeddings(model,  pickle_name, dataset_name: str):
+def pickle_embeddings(model,  pickle_name, dataset_name: str, training_ds_generator=None):
     """pickles the embeddings outputted by the model from its embedding layer into
     a tuple (x_embed , y) where x_embed is num_train_samples X embedding_length.
     pickle name saved is: f'my_embeddings_{pickle_name}'
@@ -61,13 +61,14 @@ def pickle_embeddings(model,  pickle_name, dataset_name: str):
     layer_name = 'embedding'
     encoder_model = Model(inputs=model.input,
                           outputs=model.get_layer(layer_name).output)
-    my_data_generator = data_genetator.MYGenerator('train', batch_size=100)
-    embeddings = encoder_model.predict_generator(my_data_generator)
+    if training_ds_generator is None:
+        training_ds_generator = data_genetator.MYGenerator('train', batch_size=100)
+    embeddings = encoder_model.predict_generator(training_ds_generator)
 
     os.makedirs(f'./embeddings/{dataset_name}', exist_ok=True)
 
     with open(f'./embeddings/{dataset_name}/embeddings_for_{pickle_name}.pkl', 'wb') as pkl_out:
-        pickle.dump((embeddings, my_data_generator.labels), pkl_out)
+        pickle.dump((embeddings, training_ds_generator.labels), pkl_out)
 
 
 def unpickle_embeddings(pickle_name: str, dataset_name: str):
