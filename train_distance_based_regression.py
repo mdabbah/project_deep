@@ -27,13 +27,13 @@ def distance_loss(encodeing_layer, batch_size=32, distance_margin = 25, distance
 
         # batch_size = int(y_true.shape[0])
         embeddings = encodeing_layer.output
-
+        batch_size = tf.shape(embeddings)[0]
         # filter out embeddings that had no associated regression target
         is_nan_mask = tf.is_nan(y_true)
         num_repeats = tf.shape(embeddings)[-1]//tf.shape(y_true)[-1]
 
-        y_true = tf.where(is_nan_mask, tf.zeros_like(y_true), y_true)
-        y_pred = tf.where(is_nan_mask, tf.zeros_like(y_true), y_pred)
+        # y_true = tf.where(is_nan_mask, tf.zeros_like(y_true), y_true)
+        # y_pred = tf.where(is_nan_mask, tf.zeros_like(y_true), y_pred)
 
         # calculate the embeddings distance from each other in the current batch
         squared_dists = tf.reduce_sum(tf.reshape(tf.squared_difference(K.expand_dims(embeddings, 0),
@@ -50,13 +50,40 @@ def distance_loss(encodeing_layer, batch_size=32, distance_margin = 25, distance
         # the proposed distance loss
         distance_loss_eq = tf.reduce_sum(squared_dists)
         # print them
-        print_op2 = tf.print("loss equals: ", distance_loss_eq)
+        print_op2 = tf.print("\nloss equals: \n", distance_loss_eq)
+        print_embedd_size = tf.print('embedding_size \n', tf.shape(embeddings))
 
         total_loss += (distance_loss_eq ) * distance_loss_coeff
-        with tf.control_dependencies([print_op2]):
+        with tf.control_dependencies([print_op2, print_embedd_size]):
             return total_loss
 
-    return loss
+
+    def loss_by_x_embedding(y_true, y_pred):
+
+        # batch_size = int(y_true.shape[0])
+        embeddings = encodeing_layer.output
+        batch_size = tf.shape(embeddings)[0]
+        # filter out embeddings that had no associated regression target
+
+
+        # calculate the embeddings distance from each other in the current batch
+        squared_dists = tf.reduce_sum(tf.squared_difference(K.expand_dims(embeddings, 0),
+                                                            tf.expand_dims(embeddings, 1)), axis=-1)
+
+        # the original regression loss
+        total_loss = MSE_updated(y_true, y_pred)
+
+        # the proposed distance loss
+        distance_loss_eq = tf.reduce_mean(squared_dists)
+        # print them
+        print_op2 = tf.print("\nloss equals: \n", distance_loss_eq)
+        print_embedd_size = tf.print('embedding_size \n', tf.shape(embeddings))
+
+        total_loss += (distance_loss_eq ) * distance_loss_coeff
+        with tf.control_dependencies([print_op2, print_embedd_size]):
+            return total_loss
+
+    return loss_by_x_embedding
 
 
 def l1_smooth_loss_updated(y_true, y_pred):
@@ -114,8 +141,8 @@ if __name__ == '__main__':
 
     # wheere to save weights , dataset & training details change if needed
     data_set = 'facial_key_points'
-    training_type = 'MSE'  # options 'l1_smoothed', 'distance_classifier'
-    arch = 'ELU_arch'
+    training_type = 'distance_by_x_loss'  # options 'l1_smoothed', 'distance_classifier'
+    arch = 'facial_keypoints_arc'
     weights_folder = f'./results/regression/{training_type}s_{arch}_{data_set}'
     os.makedirs(weights_folder, exist_ok=True)
     weights_file = f'{weights_folder}/{training_type}_{arch}' \
@@ -148,22 +175,27 @@ if __name__ == '__main__':
     input_size = (96, 96, 3)
     my_regressor = None
     use_nans = True
+    flip_prob = 0.3
 
     # choosing arch and optimizer
     if data_set.startswith('facial'):
-        from distance_classifier import DistanceClassifier
-        base_model = DistanceClassifier(input_size, num_classes=None, include_top=False)
-        x = base_model.output
-        x = Dense(30, activation='linear')(x)
-        my_regressor = Model(base_model.input, x, name=f'{data_set} regression model')
+        if arch.startswith('ELU_arc'):
+            from distance_classifier import DistanceClassifier
+            base_model = DistanceClassifier(input_size, num_classes=None, include_top=False)
+            x = base_model.output
+            x = Dense(30, activation='linear')(x)
+            my_regressor = Model(base_model.input, x, name=f'{data_set} regression model')
+        else:
+            from facial_keypoints_arc import FacialKeypointsArc
+            my_regressor = FacialKeypointsArc(input_size, 30, 480)
     optimizer = 'adadelta'
 
 
     # data generators
     my_training_generator = data_genetator.MYGenerator(data_type='train', batch_size=batch_size, shuffle=shuffle,
-                                                       use_nans=use_nans)
+                                                       use_nans=use_nans, horizontal_flip_prob=flip_prob)
     my_validation_generator = data_genetator.MYGenerator(data_type='valid', batch_size=batch_size, shuffle=shuffle,
-                                                         use_nans=use_nans)
+                                                         use_nans=use_nans, horizontal_flip_prob=flip_prob)
 
     num_training_xsamples_per_epoch = len(my_training_generator)
     num_validation_xsamples_per_epoch = len(my_validation_generator)

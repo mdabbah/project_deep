@@ -3,7 +3,7 @@ import keras.models as models
 from keras import regularizers
 
 
-def FacialKeypointsArc(input_size, num_targets, include_top=True):
+def FacialKeypointsArc(input_size, num_targets, num_last_hidden_units=510):
 
     img_input = Input(shape=input_size)
 
@@ -25,14 +25,16 @@ def FacialKeypointsArc(input_size, num_targets, include_top=True):
     x = MaxPool2D((2, 2), strides=(2, 2))(x)
     x = Dropout(0.3)(x)
 
-    # 4th conv block
-    x = Dense(510)(x)
+    # 4th block
+    x = Dense(num_last_hidden_units)(x)
     x = ELU(alpha=0.2)(x)
-    x = Flatten(name='embedding')(x)
+    x = Flatten()(x)
     x = Dropout(0.5)(x)
 
+    # 5th block
+    x = Dense(name='embedding', units=num_last_hidden_units)(x)
+    x = ELU(alpha=0.2)(x)
     x = Dense(num_targets, activation='linear')(x)
-
     # Create model.
     model = models.Model(img_input, x, name='distance_predictor')
 
