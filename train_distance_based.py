@@ -7,7 +7,7 @@ from keras.callbacks import EarlyStopping
 from keras.callbacks import LearningRateScheduler
 import keras.backend as K
 import tensorflow as tf
-from keras.layers import Dense, Flatten
+from keras.layers import Dense
 from keras.optimizers import Adam, SGD
 import keras.applications.inception_resnet_v2 as inception_resnet_v2
 from keras_contrib.applications.resnet import ResNet18
@@ -157,13 +157,13 @@ if __name__ == '__main__':
 
     # loading data
     if data_set == 'CIFAR-10':
-        import cifar10_data_generator as data_genetator  # choose data set
+        from data_generators import cifar10_data_generator as data_genetator, svhn_data_generator as data_genetator, \
+            cifar100_data_generator as data_genetator
+
         print("training on cifar10")
     elif data_set == 'CIFAR-100':
-        import cifar100_data_generator as data_genetator  # choose data set
         print("training on cifar100")
     elif data_set == 'SVHN':
-        import svhn_data_generator as data_genetator  # choose data set
         print("training on SVHN")
 
     # training constants, change if needed
@@ -180,7 +180,6 @@ if __name__ == '__main__':
 
     # choosing arch and optimizer
     if data_set.startswith('SVHN'):
-        import SVHN_arch_classifier as distance_classifier
         optimizer = Adam(lr=1e-3)
         num_epochs = 26
         print('SVHN suggested arch chosen, optimizer adam')
@@ -203,7 +202,8 @@ if __name__ == '__main__':
             optimizer = SGD(lr=1e-2, momentum=0.9, nesterov=True)
 
         else:
-            import distance_classifier
+            from models import distance_classifier, SVHN_arch_classifier as distance_classifier
+
             print('cifar100 suggested arch chosen, optimizer SGD w. momentum')
             optimizer = SGD(lr=1e-2, momentum=0.9)
 

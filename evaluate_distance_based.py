@@ -1,8 +1,7 @@
 from keras import Model
-from keras.models import load_model
 from keras.optimizers import SGD
 from keras.utils import np_utils
-from sklearn.metrics import classification_report, roc_auc_score
+from sklearn.metrics import roc_auc_score
 import numpy as np
 from train_distance_based import distance_loss
 import os.path
@@ -92,13 +91,13 @@ if __name__ == '__main__':
 
 
     # cifar 100 models
-    # dataset_name = 'cifar100'
+    dataset_name = 'cifar100'
     # model_name = './results/distance_classifiers_squared/distance_classifier_ 126_0.627_2.389_0.759_1.609.h5'
     # exp_name = 'distance squared trained model, SR predicted'
     # model_name = './results/cifar100_crossentropy_classifiers/distance_classifier_ 154_0.615_2.382_0.709_1.032.h5'
     # exp_name = 'reg trained model, SR predicted'
-    # model_name = './results/distance_classifiers/distance_classifier_ 142_0.640_2.538_0.785_1.719.h5'
-    # exp_name = 'distance trained model, SR predicted, confidence '
+    model_name = './results/distance_classifiers_CIFAR-100/distance_classifier_ 142_0.640_2.538_0.785_1.719.h5'
+    exp_name = 'distance trained model, SR predicted, confidence '
 
     # cifar 10 models
     # dataset_name = 'cifar10'
@@ -108,24 +107,24 @@ if __name__ == '__main__':
     # exp_name = 'ce  trained model, SR predicted'
 
     # cifar 10 models
-    dataset_name = 'svhn'
-    model_name = './results/crossentropy_classifiers_SVHN/crossentropy_classifier_ 20_0.919_0.363_0.933_0.315.h5'
-    exp_name = 'ce  trained model, SR predicted'
+    # dataset_name = 'svhn'
+    # model_name = './results/crossentropy_classifiers_SVHN/crossentropy_classifier_ 20_0.919_0.363_0.933_0.315.h5'
+    # exp_name = 'ce  trained model, SR predicted'
     # model_name = './results/distance_classifiers_SVHN/distance_classifier_ 24_0.917_0.921_0.934_0.860.h5'
     # exp_name = 'svhn distance  trained model, SR predicted'
 
     # loading data
     if dataset_name == 'cifar10':
-        import cifar10_data_generator as data_genetator  # choose data set
-        import distance_classifier
+        from data_generators import cifar10_data_generator as data_genetator, svhn_data_generator as data_genetator, \
+            cifar100_data_generator as data_genetator
+        from models import distance_classifier, SVHN_arch_classifier as distance_classifier
+
         print("eval. on cifar10")
     elif dataset_name == 'cifar100':
-        import cifar100_data_generator as data_genetator  # choose data set
-        import distance_classifier
+
         print("eval. on cifar100")
     elif dataset_name == 'svhn':
-        import svhn_data_generator as data_genetator  # choose data set
-        import SVHN_arch_classifier as distance_classifier
+
         print("eval. on svhn")
 
     #  'max margin'  , 'distance' , 'negative entropy'

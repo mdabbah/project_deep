@@ -4,12 +4,12 @@ from keras.callbacks import ModelCheckpoint
 from keras.callbacks import ReduceLROnPlateau
 from keras.callbacks import CSVLogger
 from keras.callbacks import EarlyStopping
-from keras.callbacks import LearningRateScheduler
 import keras.backend as K
 import tensorflow as tf
-from keras.layers import Dense, Flatten
-from keras.losses import MSE
+from keras.layers import Dense
 import os
+
+from keras.losses import MSE
 
 
 def distance_loss(encodeing_layer, batch_size=32, distance_margin = 25, distance_loss_coeff = 0.2):
@@ -125,7 +125,7 @@ def MSE_updated(y_true, y_pred, return_vec:bool = False):
     total_loss = tf.math.divide(tf.reduce_sum(squared_loss_filtered, axis=-1), num_non_nans)
 
     # # debugging mse updated
-    # print_non_nans = tf.print('\nmin num_non_nans:\n', tf.reduce_min(num_non_nans))
+    # print_non_nans = tf.print('\nmin num_non_nans:\n', num_non_nans)
     #
     # orig_mse_print_node = tf.print('orig mse:\n', MSE(y_true, y_pred))
     # my_mse_print_node = tf.print('my mse:\n', total_loss)
@@ -137,12 +137,15 @@ def MSE_updated(y_true, y_pred, return_vec:bool = False):
     return tf.math.reduce_mean(total_loss)
 
 
+loss_functions_cache = {'MSE': MSE, 'MSE_updated': MSE_updated, 'l1_smooth_loss_updated': l1_smooth_loss_updated,
+                        'l1_smooth_loss': tf.losses.huber_loss}
+
 if __name__ == '__main__':
 
     # wheere to save weights , dataset & training details change if needed
-    data_set = 'facial_key_points'
-    training_type = 'distance_by_x_loss'  # options 'l1_smoothed', 'distance_classifier'
-    arch = 'facial_keypoints_arc'
+    data_set = 'concrete_strength'
+    training_type = 'l1_smooth_loss'  # options 'l1_smoothed', 'distance_classifier'
+    arch = 'simple_FCN'
     weights_folder = f'./results/regression/{training_type}s_{arch}_{data_set}'
     os.makedirs(weights_folder, exist_ok=True)
     weights_file = f'{weights_folder}/{training_type}_{arch}' \
@@ -161,7 +164,8 @@ if __name__ == '__main__':
 
     # loading data
     if data_set == 'facial_key_points':
-        import facial_keypoints_data_generator as data_genetator  # choose data set
+        from data_generators import facial_keypoints_data_generator as data_genetator
+
         print("training on facial keypoints")
     elif data_set == 'fingers':
         raise ValueError("not supported yet")
@@ -176,33 +180,43 @@ if __name__ == '__main__':
     my_regressor = None
     use_nans = True
     flip_prob = 0.3
+    my_training_generator = None
+    my_validation_generator = None
+
 
     # choosing arch and optimizer
     if data_set.startswith('facial'):
         if arch.startswith('ELU_arc'):
-            from distance_classifier import DistanceClassifier
+            from models.distance_classifier import DistanceClassifier
             base_model = DistanceClassifier(input_size, num_classes=None, include_top=False)
             x = base_model.output
             x = Dense(30, activation='linear')(x)
             my_regressor = Model(base_model.input, x, name=f'{data_set} regression model')
         else:
-            from facial_keypoints_arc import FacialKeypointsArc
+            from models.facial_keypoints_arc import FacialKeypointsArc
             my_regressor = FacialKeypointsArc(input_size, 30, 480)
+
+        my_training_generator = data_genetator.MYGenerator(data_type='train', batch_size=batch_size, shuffle=shuffle,
+                                                           use_nans=use_nans, horizontal_flip_prob=flip_prob)
+        my_validation_generator = data_genetator.MYGenerator(data_type='valid', batch_size=batch_size, shuffle=shuffle,
+                                                             use_nans=use_nans, horizontal_flip_prob=flip_prob)
+    elif data_set.startswith('concrete'):
+        from data_generators import concrete_dataset_generator as data_genetator
+        from models.concrete_strength_arc import simple_FCN
+        my_regressor = simple_FCN(8, 1)
+
+        num_epochs = 800
+        batch_size = 32
+        my_training_generator = data_genetator.MYGenerator(data_type='train', batch_size=batch_size, shuffle=True)
+        my_validation_generator = data_genetator.MYGenerator(data_type='valid', batch_size=batch_size, shuffle=True)
     optimizer = 'adadelta'
-
-
-    # data generators
-    my_training_generator = data_genetator.MYGenerator(data_type='train', batch_size=batch_size, shuffle=shuffle,
-                                                       use_nans=use_nans, horizontal_flip_prob=flip_prob)
-    my_validation_generator = data_genetator.MYGenerator(data_type='valid', batch_size=batch_size, shuffle=shuffle,
-                                                         use_nans=use_nans, horizontal_flip_prob=flip_prob)
 
     num_training_xsamples_per_epoch = len(my_training_generator)
     num_validation_xsamples_per_epoch = len(my_validation_generator)
 
     encoder = my_regressor.get_layer('embedding')
     loss_function = \
-        distance_loss(encoder, batch_size) if training_type.startswith('distance') else MSE_updated
+        distance_loss(encoder, batch_size) if training_type.startswith('distance') else loss_functions_cache[training_type]
 
     my_regressor.compile(optimizer=optimizer, loss=loss_function, metrics=[MSE_updated])
 

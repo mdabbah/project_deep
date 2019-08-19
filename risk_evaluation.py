@@ -2,7 +2,7 @@ import os
 
 from keras import Model, Input
 import numpy as np
-from keras.layers import Dropout, Lambda, Dense
+from keras.layers import Dropout, Dense
 
 from evaluate_distance_based import pickle_embeddings, unpickle_embeddings
 from train_distance_based_regression import MSE_updated
@@ -123,7 +123,8 @@ if __name__ == '__main__':
 
     # loading data
     if data_set == 'facial_key_points':
-        import facial_keypoints_data_generator as data_genetator  # choose data set
+        from data_generators import facial_keypoints_data_generator as data_genetator
+
         input_size = 96, 96, 3
         print("training on facial keypoints")
     elif data_set == 'fingers':
@@ -131,7 +132,7 @@ if __name__ == '__main__':
 
     # building the model
     if data_set.startswith('facial'):
-        from distance_classifier import DistanceClassifier
+        from models.distance_classifier import DistanceClassifier
         base_model = DistanceClassifier(input_size, num_classes=None, include_top=False)
         x = base_model.output
         x = Dense(30, activation='linear')(x)

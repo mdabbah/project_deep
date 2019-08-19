@@ -3,9 +3,7 @@ import os
 from keras.callbacks import CSVLogger, ModelCheckpoint, LearningRateScheduler
 from keras.datasets import cifar100
 from keras.optimizers import SGD
-from keras_contrib.applications import ResNet18
-from distance_classifier import DistanceClassifier
-from keras.applications import Xception
+from resnet_keras_contrib import ResNet18
 from keras.utils import np_utils
 import numpy as np
 from keras_preprocessing.image import ImageDataGenerator
