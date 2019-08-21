@@ -6,8 +6,10 @@ import numpy as np
 class MYGenerator(keras.utils.Sequence):
 
     DATAPATH=r'.\data\regression\concrete_data'
+
     def __init__(self, data_type: str, batch_size: int = 100, shuffle: bool = False):
 
+        self.dataset_name = 'concrete_strength'
         self.data_path = f'{self.DATAPATH}/{data_type}.csv'
         self.data = pd.read_csv(self.data_path)
 
@@ -15,7 +17,7 @@ class MYGenerator(keras.utils.Sequence):
             self.data = self.data.sample(frac=1)
 
         self.x_data = np.array(self.data.iloc[:, :-1])
-        self.y_data = np.array(self.data.iloc[:, -1])
+        self.y_data = self.labels = np.array(self.data.iloc[:, -1])
         self.batch_size = batch_size
 
     def __len__(self):
@@ -28,3 +30,10 @@ class MYGenerator(keras.utils.Sequence):
         batch_y = self.y_data[idx * self.batch_size: (idx + 1) * self.batch_size]
 
         return batch_x, batch_y
+
+    def on_epoch_end(self):
+        print('shuffled on epoch end')
+        prem = np.random.permutation(self.x_data.shape[0])
+        self.x_data = self.x_data[prem]
+        self.y_data = self.y_data[prem]
+        self.labels = self.y_data

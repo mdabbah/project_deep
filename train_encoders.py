@@ -63,22 +63,20 @@ def distance_loss(encodeing_layer, batch_size=32, distance_margin = 25, distance
         embeddings = encodeing_layer.output
         batch_size = tf.shape(embeddings)[0]
         # filter out embeddings that had no associated regression target
-
+        embedding_norms = tf.norm(embeddings, axis=-1)  # tf.reduce_sum(tf.square(embeddings), axis=-1)
 
         # calculate the embeddings distance from each other in the current batch
         squared_dists = tf.reduce_sum(tf.squared_difference(K.expand_dims(embeddings, 0),
                                                             tf.expand_dims(embeddings, 1)), axis=-1)
 
-        # the original regression loss
-        total_loss = MSE_updated(y_true, y_pred)
-
         # the proposed distance loss
         distance_loss_eq = tf.reduce_mean(squared_dists)
+        norm_loss = tf.reduce_mean(tf.maximum(0. , distance_margin - embedding_norms))
         # print them
         print_op2 = tf.print("\nloss equals: \n", distance_loss_eq)
         print_embedd_size = tf.print('embedding_size \n', tf.shape(embeddings))
 
-        total_loss += (distance_loss_eq ) * distance_loss_coeff
+        total_loss = distance_loss_eq + norm_loss
         with tf.control_dependencies([print_op2, print_embedd_size]):
             return total_loss
 
@@ -151,7 +149,7 @@ if __name__ == '__main__':
     weights_folder = f'./results/regression/{training_type}s_{arch}_{data_set}'
     os.makedirs(weights_folder, exist_ok=True)
     weights_file = f'{weights_folder}/{training_type}_{arch}' \
-                   '_{epoch: 03d}_{val_loss:.3f}_{loss:.3f}_{MSE_updated:.5f}_{val_MSE_updated: .5f}.h5'
+                   '_{epoch: 03d}_{val_loss:.3f}_{loss:.3f}.h5'
 
     # callbacks change if needed
     lr_reducer = ReduceLROnPlateau(factor=np.sqrt(0.1), cooldown=0,
@@ -160,7 +158,7 @@ if __name__ == '__main__':
     # lr_scheduler_callback = LearningRateScheduler(lr_scheduler_maker(data_set))
     early_stopper = EarlyStopping(min_delta=0.001, patience=20)
     csv_logger = CSVLogger(f'{training_type}-{data_set}-{arch}.csv')
-    model_checkpoint = ModelCheckpoint(weights_file, monitor='val_MSE_updated', save_best_only=True,
+    model_checkpoint = ModelCheckpoint(weights_file, monitor='val_loss', save_best_only=True,
                                        save_weights_only=True, mode='min')
     my_callbacks = [csv_logger, model_checkpoint] # lr_scheduler_callback , lr_reducer, early_stopper]
 
@@ -205,7 +203,7 @@ if __name__ == '__main__':
     elif data_set.startswith('concrete'):
         from data_generators import concrete_dataset_generator as data_genetator
         from models.concrete_strength_arc import simple_FCN
-        my_regressor = simple_FCN(8, 1)
+        my_regressor = simple_FCN(8, 1, False)
 
         num_epochs = 800
         batch_size = 32
@@ -221,7 +219,7 @@ if __name__ == '__main__':
         distance_loss(encoder, batch_size, training_type=training_type) if training_type.startswith('distance')\
             else loss_functions_cache[training_type]
 
-    my_regressor.compile(optimizer=optimizer, loss=loss_function, metrics=[MSE_updated])
+    my_regressor.compile(optimizer=optimizer, loss=loss_function)
 
     # start training
     my_regressor.fit_generator(my_training_generator,
