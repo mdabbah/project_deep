@@ -2,12 +2,13 @@ import os
 
 from keras import Model, Input
 import numpy as np
-from keras.layers import Dropout, Dense
+from keras.layers import Dropout, Dense, Lambda
 
 from evaluate_distance_based import pickle_embeddings, unpickle_embeddings
 from train_distance_based_regression import MSE_updated
 import tensorflow as tf
 from keras.backend import eval
+import keras.backend as K
 
 
 def calc_selective_risk(coverage: float, test_losses, uncertainty_on_validation, uncertainty_on_test):
@@ -41,12 +42,11 @@ def turn_on_dropout(model: Model, new_rate = 0.05):
     :param model: model to replace the dropout layers in
     :return: the updated model
     """
-    layers = [l for l in model.layers]
 
     x = input =Input(shape=model.input_shape[1:])
     for layer in model.layers:
         if layer.name.startswith('drop_out_to_turn_on'):
-            x = Dropout(rate=new_rate, name=layer.name + '_always_on')(x, training=True)
+            x = Lambda(lambda l_in: K.dropout(l_in, level=new_rate), name='drop_out_to_turn_on')(x)
             continue
         x = layer(x)
 
@@ -72,27 +72,27 @@ def MC_dropout_predictions(my_regressor: Model, test_generator, num_evaluations:
     for i in range(num_evaluations):
         predictions[i, :] = np.squeeze(model_dropout_turned_on.predict_generator(test_generator))
 
-    uncertainty_per_test_sample = np.std(predictions, axis=0)
-    if len(uncertainty_per_test_sample.shape)>1:
-        uncertainty_per_test_sample = np.mean(np.std(predictions, axis=0), axis=-1)
+    uncertainty_per_test_sample = np.var(predictions, axis=0)
+    if len(uncertainty_per_test_sample.shape) > 1:
+        uncertainty_per_test_sample = np.mean(uncertainty_per_test_sample, axis=-1)
     return np.mean(predictions, axis=0), uncertainty_per_test_sample
 
 
-def distance_predictions(my_regressor, test_generator, training_generator):
+def distance_predictions(my_regressor, my_encoder, test_generator, training_generator):
 
     dataset_name = 'regression/' + test_generator.dataset_name
     model_name = my_regressor.name
     pkl = unpickle_embeddings(model_name, dataset_name)
     if not pkl:
-        pickle_embeddings(my_regressor, model_name, dataset_name, training_generator)
+        pickle_embeddings(my_encoder, model_name, dataset_name, training_generator)
         pkl = unpickle_embeddings(model_name, dataset_name)
 
     training_embeddings, training_targets = pkl
     if len(training_targets.shape) == 1:
         training_targets = np.expand_dims(training_targets, 1)
     layer_name = 'embedding'
-    encoder_model = Model(inputs=my_regressor.input,
-                          outputs=my_regressor.get_layer(layer_name).output)
+    encoder_model = Model(inputs=my_encoder.input,
+                          outputs=my_encoder.get_layer(layer_name).output)
     test_embeddings = encoder_model.predict_generator(test_generator)
 
     batch_size = 32
@@ -128,7 +128,9 @@ if __name__ == '__main__':
     training_generator = None
     validation_generator = None
     test_generator = None
-    weights_path = None
+    regressor_weights_path = None
+    my_encoder = None
+    encoder_weights_path = None
 
     # loading data
     if data_set == 'facial_key_points':
@@ -150,8 +152,11 @@ if __name__ == '__main__':
         test_generator = data_genetator.MYGenerator('test', batch_size, True)
         input_size = 8
         my_regressor = model(input_size, 1)
-        weights_path = r'./results/regression/distance_by_x_encodings_simple_FCN_concrete_strength/' \
-                       r'distance_by_x_encoding_simple_FCN_ 573_32.042_31.230_26.25158_ 27.36713.h5'
+        my_encoder = model(input_size, 1, False)
+        regressor_weights_path = r'./results/regression/l1_smooth_losss_simple_FCN_concrete_strength/' \
+                       r'l1_smooth_loss_simple_FCN_ 659_3.177_3.137_27.02343_ 24.50994.h5'
+        encoder_weights_path = r'./results/regression/distance_by_x_encodings_simple_FCN_concrete_strength/' \
+                       r'distance_by_x_encoding_simple_FCN_ 778_0.000_0.000.h5'
 
     # building the model
     if data_set.startswith('facial'):
@@ -161,21 +166,22 @@ if __name__ == '__main__':
         x = Dense(30, activation='linear')(x)
         my_regressor = Model(base_model.input, x, name=f'{data_set} regression model')
 
-        weights_path = r'.\results\regression\distance_by_x_encodings_simple_FCN_concrete_strength\distance_by_x_encoding_simple_FCN_ 573_32.042_31.230_26.25158_ 27.36713.h5'
+        regressor_weights_path = r'.\results\regression\distance_by_x_encodings_simple_FCN_concrete_strength\distance_by_x_encoding_simple_FCN_ 573_32.042_31.230_26.25158_ 27.36713.h5'
+
     optimizer = 'adadelta'
 
-    my_regressor.compile(optimizer=optimizer, loss=loss_function, metrics=['MSE'])
-
     # load weights
-    my_regressor.name = os.path.split(weights_path)[-1][:-3]
-    my_regressor.load_weights(weights_path)
+    my_encoder.name = 'encoder_' + os.path.split(encoder_weights_path)[-1][:-3]
+    my_regressor.load_weights(regressor_weights_path)
+    my_encoder.load_weights(encoder_weights_path)
+    my_encoder = my_regressor
 
     if uncertainty_metric == 'MC_dropout_std':
         valid_predictions, valid_uncertainty = MC_dropout_predictions(my_regressor, validation_generator)
         test_predictions, test_uncertainty = MC_dropout_predictions(my_regressor, test_generator)
     else:
-        valid_predictions, valid_uncertainty = distance_predictions(my_regressor, validation_generator, training_generator)
-        test_predictions, test_uncertainty = distance_predictions(my_regressor, test_generator, training_generator)
+        valid_predictions, valid_uncertainty = distance_predictions(my_regressor, my_encoder, validation_generator, training_generator)
+        test_predictions, test_uncertainty = distance_predictions(my_regressor, my_encoder, test_generator, training_generator)
 
     y_true = test_generator.labels if len(test_generator.labels.shape) > 1 else np.expand_dims(test_generator.labels, 1)
     y_pred = test_predictions if len(test_predictions.shape) > 1 else np.expand_dims(test_predictions, 1)
@@ -190,6 +196,7 @@ if __name__ == '__main__':
         print(risk_coverages)
 
     print(f'risk coverage numbers for {my_regressor.name} {uncertainty_metric} is {risk_coverages}')
+    [print(str(c)) for c in risk_coverages]
     print(f'AURC-CURVE is {np.sum(risk_coverages)}')
 
 
