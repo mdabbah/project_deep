@@ -103,6 +103,8 @@ def distance_predictions(my_regressor, my_encoder, test_generator, training_gene
     dists = np.zeros((test_embeddings.shape[0], training_embeddings.shape[0], training_targets.shape[1]))
     for bt in range(np.int(np.ceil(num_test_samples//batch_size))+1):
         test_embeddings_bt = test_embeddings[bt*batch_size:batch_size*(bt+1), :]
+        if test_embeddings_bt.size == 0:
+            break
         actual_bt_size = test_embeddings_bt.shape[0]
         mask = np.repeat(np.expand_dims(np.isnan(training_targets), axis=0), actual_bt_size, axis=0)
         batch_dists = np.sum(
@@ -117,10 +119,10 @@ def distance_predictions(my_regressor, my_encoder, test_generator, training_gene
 if __name__ == '__main__':
 
     # general params
-    data_set = 'concrete_strength'
+    data_set = 'facial_key_points'
     loss_type = 'MSE'  # options 'l1_smoothed', 'distance_classifier'
-    arch = 'ELU_arch'
-    uncertainty_metric = 'MC_dropout_std'  # options 'min_distance' , 'MC_dropout_std'
+    arch = 'facial_key_points_arc'
+    uncertainty_metric = 'min_distance'  # options 'min_distance' , 'MC_dropout_std'
     batch_size = 32
     input_size = None
     loss_function = MSE_updated
@@ -137,7 +139,8 @@ if __name__ == '__main__':
         from data_generators import facial_keypoints_data_generator as data_genetator
 
         training_generator = data_genetator.MYGenerator('train', use_nans=True)
-        validation_generator = data_genetator.MYGenerator('valid', batch_size, shuffle=True, use_nans=True)
+        validation_generator = data_genetator.MYGenerator('valid', batch_size, shuffle=True, use_nans=True,
+                                                          horizontal_flip_prob=0)
         test_generator = data_genetator.MYGenerator('test', batch_size, shuffle=True, use_nans=True,
                                                     horizontal_flip_prob=0)
         input_size = 96, 96, 3
@@ -160,15 +163,12 @@ if __name__ == '__main__':
 
     # building the model
     if data_set.startswith('facial'):
-        from models.distance_classifier import DistanceClassifier
-        base_model = DistanceClassifier(input_size, num_classes=None, include_top=False)
-        x = base_model.output
-        x = Dense(30, activation='linear')(x)
-        my_regressor = Model(base_model.input, x, name=f'{data_set} regression model')
-
-        regressor_weights_path = r'.\results\regression\distance_by_x_encodings_simple_FCN_concrete_strength\distance_by_x_encoding_simple_FCN_ 573_32.042_31.230_26.25158_ 27.36713.h5'
-
-    optimizer = 'adadelta'
+        from models.facial_keypoints_arc import FacialKeypointsArc as model
+        my_regressor = model(input_size, 30, 480)
+        regressor_weights_path = r'./results/regression/distance_by_x_encodings_facial_key_points_arc_facial_key_points/' \
+                                 r'distance_by_x_encoding_facial_key_points_arc_ 67_0.004_0.004_0.00322_ 0.00391.h5'
+        encoder_weights_path = regressor_weights_path
+        my_encoder = my_regressor
 
     # load weights
     my_encoder.name = 'encoder_' + os.path.split(encoder_weights_path)[-1][:-3]
@@ -186,6 +186,10 @@ if __name__ == '__main__':
     y_true = test_generator.labels if len(test_generator.labels.shape) > 1 else np.expand_dims(test_generator.labels, 1)
     y_pred = test_predictions if len(test_predictions.shape) > 1 else np.expand_dims(test_predictions, 1)
     test_losses = eval(MSE_updated(y_true, y_pred, return_vec=True))
+
+    validation_MSE = eval(MSE_updated(validation_generator.labels, valid_predictions))
+    test_MSE = eval(MSE_updated(test_generator.labels, test_predictions))
+    print(f'valid err is {validation_MSE}, test err is {test_MSE}')
 
     coverages = [0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1.]
     risk_coverages = np.zeros(len(coverages))

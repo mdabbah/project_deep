@@ -60,6 +60,7 @@ class MYGenerator(keras.utils.Sequence):
             permute = np.random.permutation(num_samples)
             self.images = self.images[permute, :, :, :]
             self.key_points = self.key_points[permute, :]
+            self.labels = self.key_points
 
         self.batch_size = batch_size
         self.horizontal_flip_prob = horizontal_flip_prob

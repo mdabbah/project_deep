@@ -32,9 +32,6 @@ def distance_loss(encodeing_layer, batch_size=32, distance_margin = 25, distance
         is_nan_mask = tf.is_nan(y_true)
         num_repeats = tf.shape(embeddings)[-1]//tf.shape(y_true)[-1]
 
-        # y_true = tf.where(is_nan_mask, tf.zeros_like(y_true), y_true)
-        # y_pred = tf.where(is_nan_mask, tf.zeros_like(y_true), y_pred)
-
         # calculate the embeddings distance from each other in the current batch
         squared_dists = tf.reduce_sum(tf.reshape(tf.squared_difference(K.expand_dims(embeddings, 0),
                                                                        tf.expand_dims(embeddings, 1)),
@@ -53,7 +50,7 @@ def distance_loss(encodeing_layer, batch_size=32, distance_margin = 25, distance
         print_op2 = tf.print("\nloss equals: \n", distance_loss_eq)
         print_embedd_size = tf.print('embedding_size \n', tf.shape(embeddings))
 
-        total_loss += (distance_loss_eq ) * distance_loss_coeff
+        total_loss += distance_loss_eq  * distance_loss_coeff
         with tf.control_dependencies([print_op2, print_embedd_size]):
             return total_loss
 
@@ -61,9 +58,6 @@ def distance_loss(encodeing_layer, batch_size=32, distance_margin = 25, distance
 
         # batch_size = int(y_true.shape[0])
         embeddings = encodeing_layer.output
-        batch_size = tf.shape(embeddings)[0]
-        # filter out embeddings that had no associated regression target
-
 
         # calculate the embeddings distance from each other in the current batch
         squared_dists = tf.reduce_sum(tf.squared_difference(K.expand_dims(embeddings, 0),
@@ -78,7 +72,7 @@ def distance_loss(encodeing_layer, batch_size=32, distance_margin = 25, distance
         print_op2 = tf.print("\nloss equals: \n", distance_loss_eq)
         print_embedd_size = tf.print('embedding_size \n', tf.shape(embeddings))
 
-        total_loss += (distance_loss_eq ) * distance_loss_coeff
+        total_loss += distance_loss_eq * distance_loss_coeff
         with tf.control_dependencies([print_op2, print_embedd_size]):
             return total_loss
 
@@ -86,6 +80,43 @@ def distance_loss(encodeing_layer, batch_size=32, distance_margin = 25, distance
         return loss_by_x_embedding
 
     return loss
+
+
+def embeddings_avg_distance_metric(embedding_layer, metric: str):
+    """
+    returns a method that calculates the average/std distance between the outputs
+    of the given layer
+    :param metric: one of 'mean' or 'std'
+    :param embedding_layer: the desired layer of a model
+    :return: a method to be passed to model metrics
+    """
+
+    def avg_metric(y_true, y_pred):
+        # we will totally ignore the y_true and y_predas we are only interested in the outputs of the
+        # embedding layer
+        embeddings = embedding_layer.output
+
+        # calculate the embeddings distance from each other in the current batch
+        squared_dists = tf.reduce_sum(tf.squared_difference(K.expand_dims(embeddings, 0),
+                                                            tf.expand_dims(embeddings, 1)), axis=-1)
+        return tf.reduce_mean(squared_dists)
+
+    def std_metric(y_true, y_pred):
+        # we will totally ignore the y_true and y_predas we are only interested in the outputs of the
+        # embedding layer
+        embeddings = embedding_layer.output
+
+        # calculate the embeddings distance from each other in the current batch
+        squared_dists = tf.reduce_sum(tf.squared_difference(K.expand_dims(embeddings, 0),
+                                                            tf.expand_dims(embeddings, 1)), axis=-1)
+        return tf.math.reduce_std(squared_dists)
+
+    if metric == 'mean':
+        return avg_metric
+    elif metric == 'std':
+        return std_metric
+    elif metric == 'both':
+        return [avg_metric, std_metric]
 
 
 def l1_smooth_loss_updated(y_true, y_pred):
@@ -108,9 +139,10 @@ def l1_smooth_loss_updated(y_true, y_pred):
     return tf.math.reduce_mean(total_loss)
 
 
-def MSE_updated(y_true, y_pred, return_vec:bool = False):
+def MSE_updated(y_true, y_pred, return_vec: bool = False):
     """
     same as MSE but ignores cells where y_true is nan
+    :param return_vec: whether to return mean loss on samples or vector of losses on each sample
     :param y_true: true regression numbers
     :param y_pred: net work output
     :return:
@@ -145,9 +177,9 @@ loss_functions_cache = {'MSE': MSE, 'MSE_updated': MSE_updated, 'l1_smooth_loss_
 if __name__ == '__main__':
 
     # wheere to save weights , dataset & training details change if needed
-    data_set = 'concrete_strength'
+    data_set = 'facial_key_points'
     training_type = 'distance_by_x_encoding'  # options 'l1_smoothed', 'distance_classifier'
-    arch = 'simple_FCN'
+    arch = 'facial_key_points_arc'
     weights_folder = f'./results/regression/{training_type}s_{arch}_{data_set}'
     os.makedirs(weights_folder, exist_ok=True)
     weights_file = f'{weights_folder}/{training_type}_{arch}' \
@@ -162,7 +194,7 @@ if __name__ == '__main__':
     csv_logger = CSVLogger(f'{training_type}-{data_set}-{arch}.csv')
     model_checkpoint = ModelCheckpoint(weights_file, monitor='val_MSE_updated', save_best_only=True,
                                        save_weights_only=True, mode='min')
-    my_callbacks = [csv_logger, model_checkpoint] # lr_scheduler_callback , lr_reducer, early_stopper]
+    my_callbacks = [csv_logger, model_checkpoint]  # lr_scheduler_callback , lr_reducer, early_stopper]
 
     # loading data
     if data_set == 'facial_key_points':
@@ -174,9 +206,9 @@ if __name__ == '__main__':
 
     # training constants, change if needed
     batch_size = 32
-    num_epochs = 3000
+    num_epochs = 600
     # distance_margin = 25
-    # distance_loss_coeff = 0.2
+    distance_loss_coeff = 0.0007
     shuffle = True
     input_size = (96, 96, 3)
     my_regressor = None
@@ -184,7 +216,6 @@ if __name__ == '__main__':
     flip_prob = 0.3
     my_training_generator = None
     my_validation_generator = None
-
 
     # choosing arch and optimizer
     if data_set.startswith('facial'):
@@ -217,11 +248,13 @@ if __name__ == '__main__':
     num_validation_xsamples_per_epoch = len(my_validation_generator)
 
     encoder = my_regressor.get_layer('embedding')
-    loss_function = \
-        distance_loss(encoder, batch_size, training_type=training_type) if training_type.startswith('distance')\
-            else loss_functions_cache[training_type]
+    if training_type.startswith('distance'):
+        loss_function = distance_loss(encoder, batch_size,
+                                      distance_loss_coeff=distance_loss_coeff,  training_type=training_type)
+    else:
+        loss_function = loss_functions_cache[training_type]
 
-    my_regressor.compile(optimizer=optimizer, loss=loss_function, metrics=[MSE_updated])
+    my_regressor.compile(optimizer=optimizer, loss=loss_function, metrics=[MSE_updated, *embeddings_avg_distance_metric(encoder, 'both')])
 
     # start training
     my_regressor.fit_generator(my_training_generator,
