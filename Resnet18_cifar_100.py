@@ -43,15 +43,17 @@ Y_train = Y_train[:num_training_samples, :]
 # This will do preprocessing and realtime data augmentation:
 datagen = ImageDataGenerator(
     samplewise_center=False,  # set each sample mean to 0
-    featurewise_center=True,
+    featurewise_center=False,
     featurewise_std_normalization=False,  # divide inputs by std of the dataset
     samplewise_std_normalization=False,  # divide each input by its std
-    zca_whitening=True,  # apply ZCA whitening
-    rotation_range=0,  # randomly rotate images in the range (degrees, 0 to 180)
+    zca_whitening=False,  # apply ZCA whitening
+    rotation_range=15,  # randomly rotate images in the range (degrees, 0 to 180)
     width_shift_range=0.1,  # randomly shift images horizontally
     height_shift_range=0.1,  # randomly shift images vertically
     horizontal_flip=True,  # randomly flip images
-    vertical_flip=False)  # randomly flip images
+    vertical_flip=False,  # randomly flip images
+    zoom_range=0.05,
+)
 
 # Compute quantities required for featurewise normalization
 # (std, mean, and principal components if ZCA whitening is applied).
@@ -65,9 +67,9 @@ validation_generator = datagen.flow(X_valid, Y_valid, batch_size=batch_size, shu
 
 my_classifier = ResNet18((32, 32, 3), 100)
 optimizer = SGD(lr=0.1, momentum=0.9, nesterov=True)
-my_classifier.compile(optimizer='adam', loss=categorical_crossentropy, metrics=['accuracy'])
+my_classifier.compile(optimizer=optimizer, loss=categorical_crossentropy, metrics=['accuracy'])
 
-weights_folder = './resnet18_exp_sgd_weightdecay'
+weights_folder = './resnet18_exp_sgd_no_zca_30'
 
 os.makedirs(weights_folder, exist_ok=True)
 weights_file = f'{weights_folder}/' \
@@ -88,7 +90,7 @@ def lr_scheduler(epoch, current_lr):
     :param current_lr: the current learning rate
     :return: the new learning rate
     """
-    return current_lr / 5 ** (epoch // 60)
+    return current_lr / 5 ** (epoch // 30)
 
 
 my_callbacks = [csv_logger, model_checkpoint, LearningRateScheduler(lr_scheduler)]  # lr_scheduler_callback , lr_reducer, early_stopper]

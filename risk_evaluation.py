@@ -31,6 +31,14 @@ def calc_selective_risk(coverage: float, test_losses, uncertainty_on_validation,
     uncertainty_on_validation = np.sort(uncertainty_on_validation)
     th = np.percentile(uncertainty_on_validation, coverage * 100)
 
+    loss_on_covered = np.mean(test_losses[uncertainty_on_test < th])
+    test_coverage = np.mean(uncertainty_on_test < th)
+    risk = loss_on_covered / test_coverage
+    print(f'for given coverage: {coverage}, threshold is: {th},'
+          f' test coverage: {test_coverage}, '
+          f'test loss on coverd {loss_on_covered}, '
+          f'risk is: {risk}')
+
     return np.mean(test_losses[uncertainty_on_test < th]) / np.mean(uncertainty_on_test < th)
 
 
@@ -46,6 +54,7 @@ def turn_on_dropout(model: Model, new_rate = 0.05):
     x = input =Input(shape=model.input_shape[1:])
     for layer in model.layers:
         if layer.name.startswith('drop_out_to_turn_on'):
+            print('found drop_out_to_turn_on layer ')
             x = Lambda(lambda l_in: K.dropout(l_in, level=new_rate), name='drop_out_to_turn_on')(x)
             continue
         x = layer(x)
@@ -100,20 +109,18 @@ def distance_predictions(my_regressor, my_encoder, test_generator, training_gene
     num_test_samples = test_embeddings.shape[0]
     embedding_len_per_target = int(training_embeddings.shape[1]//training_targets.shape[1])  # we have y_true.shape[0] targets
 
-    dists = np.zeros((test_embeddings.shape[0], training_embeddings.shape[0], training_targets.shape[1]))
+    dists = np.zeros((test_embeddings.shape[0], training_embeddings.shape[0]))
     for bt in range(np.int(np.ceil(num_test_samples//batch_size))+1):
         test_embeddings_bt = test_embeddings[bt*batch_size:batch_size*(bt+1), :]
         if test_embeddings_bt.size == 0:
             break
         actual_bt_size = test_embeddings_bt.shape[0]
         mask = np.repeat(np.expand_dims(np.isnan(training_targets), axis=0), actual_bt_size, axis=0)
-        batch_dists = np.sum(
-            np.reshape(np.square(np.expand_dims(training_embeddings, 0) - np.expand_dims(test_embeddings_bt, 1)),
-                       newshape=(actual_bt_size, num_training_samples, -1, embedding_len_per_target)), axis=-1)
-        batch_dists[mask] = np.inf
-        dists[batch_size*bt:batch_size*(bt+1), :, :] = batch_dists
+        batch_dists = np.sum(np.square(np.expand_dims(training_embeddings, 0) - np.expand_dims(test_embeddings_bt, 1)), axis=-1)
+        # batch_dists[mask] = np.inf
+        dists[batch_size*bt:batch_size*(bt+1), :] = batch_dists
 
-    return my_regressor.predict_generator(test_generator), np.mean(np.min(dists, axis=1), axis=-1)
+    return my_regressor.predict_generator(test_generator), np.min(dists, axis=1)
 
 
 if __name__ == '__main__':
@@ -166,7 +173,7 @@ if __name__ == '__main__':
         from models.facial_keypoints_arc import FacialKeypointsArc as model
         my_regressor = model(input_size, 30, 480)
         regressor_weights_path = r'./results/regression/distance_by_x_encodings_facial_key_points_arc_facial_key_points/' \
-                                 r'distance_by_x_encoding_facial_key_points_arc_ 67_0.004_0.004_0.00322_ 0.00391.h5'
+                                 r'distance_by_x_encoding_facial_key_points_arc_ 440_0.003_0.002_0.00170_ 0.00293.h5'
         encoder_weights_path = regressor_weights_path
         my_encoder = my_regressor
 
@@ -185,7 +192,7 @@ if __name__ == '__main__':
 
     y_true = test_generator.labels if len(test_generator.labels.shape) > 1 else np.expand_dims(test_generator.labels, 1)
     y_pred = test_predictions if len(test_predictions.shape) > 1 else np.expand_dims(test_predictions, 1)
-    test_losses = eval(MSE_updated(y_true, y_pred, return_vec=True))
+    test_losses = np.sqrt(eval(MSE_updated(y_true, y_pred, return_vec=True)))*48
 
     validation_MSE = eval(MSE_updated(validation_generator.labels, valid_predictions))
     test_MSE = eval(MSE_updated(test_generator.labels, test_predictions))
@@ -197,7 +204,7 @@ if __name__ == '__main__':
         risk_coverages[i] = calc_selective_risk(coverage=coverage, test_losses=test_losses,
                                                 uncertainty_on_validation=valid_uncertainty,
                                                 uncertainty_on_test=test_uncertainty)
-        print(risk_coverages)
+        # print(risk_covera/ges)
 
     print(f'risk coverage numbers for {my_regressor.name} {uncertainty_metric} is {risk_coverages}')
     [print(str(c)) for c in risk_coverages]
