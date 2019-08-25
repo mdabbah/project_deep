@@ -37,7 +37,7 @@ def distance_loss(encodeing_layer, batch_size=32, distance_margin = 25, distance
                                                                        tf.expand_dims(embeddings, 1)),
                                                  shape=(batch_size, batch_size, -1, num_repeats)), axis=-1)
 
-        # filter embedding parts where label isn't well defined
+        # filter embedding parts where target isn't well defined
         is_nan_mask = tf.logical_or(tf.expand_dims(is_nan_mask, 0), tf.expand_dims(is_nan_mask, 1))
         squared_dists = tf.where(is_nan_mask, tf.zeros_like(squared_dists), squared_dists)
 
@@ -247,6 +247,7 @@ if __name__ == '__main__':
     num_training_xsamples_per_epoch = len(my_training_generator)
     num_validation_xsamples_per_epoch = len(my_validation_generator)
 
+    #  choosing the loss function to train with
     encoder = my_regressor.get_layer('embedding')
     if training_type.startswith('distance'):
         loss_function = distance_loss(encoder, batch_size,

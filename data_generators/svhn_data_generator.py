@@ -26,6 +26,7 @@ def load_data(path: str):
     Y = Y-1
     return X, Y
 
+
 # load data
 (X_train, y_train), (X_test, y_test) = load_data(DATA_TRAIN_PATH), load_data(DATA_TEST_PATH)
 nb_classes = 10

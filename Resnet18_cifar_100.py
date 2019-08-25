@@ -24,6 +24,9 @@ X_test = X_test.astype('float32')
 
 np.random.seed(0)
 
+# CIFAR100_TRAIN_MEAN = (0.5070751592371323, 0.48654887331495095, 0.4409178433670343)
+# CIFAR100_TRAIN_STD = (0.2673342858792401, 0.2564384629170883, 0.27615047132568404)
+
 mean_image = np.mean(X_train, axis=0)
 X_train -= mean_image
 X_test -= mean_image
@@ -32,28 +35,26 @@ X_test /= 128.
 
 
 # split data for validation
-num_training_samples = int(X_train.shape[0]*0.9)
-X_valid = X_train[num_training_samples:, :, :, :]
-X_train = X_train[:num_training_samples, :, :, :]
-
-Y_valid = Y_train[num_training_samples:, :]
-Y_train = Y_train[:num_training_samples, :]
+# num_training_samples = int(X_train.shape[0]*0.9)
+# X_valid = X_train[num_training_samples:, :, :, :]
+# X_train = X_train[:num_training_samples, :, :, :]
+#
+# Y_valid = Y_train[num_training_samples:, :]
+# Y_train = Y_train[:num_training_samples, :]
 
 
 # This will do preprocessing and realtime data augmentation:
 datagen = ImageDataGenerator(
     samplewise_center=False,  # set each sample mean to 0
-    featurewise_center=False,
+    featurewise_center=True,
     featurewise_std_normalization=False,  # divide inputs by std of the dataset
     samplewise_std_normalization=False,  # divide each input by its std
-    zca_whitening=False,  # apply ZCA whitening
-    rotation_range=15,  # randomly rotate images in the range (degrees, 0 to 180)
+    zca_whitening=True,  # apply ZCA whitening
+    rotation_range=0,  # randomly rotate images in the range (degrees, 0 to 180)
     width_shift_range=0.1,  # randomly shift images horizontally
     height_shift_range=0.1,  # randomly shift images vertically
     horizontal_flip=True,  # randomly flip images
-    vertical_flip=False,  # randomly flip images
-    zoom_range=0.05,
-)
+    vertical_flip=False)  # randomly flip images
 
 # Compute quantities required for featurewise normalization
 # (std, mean, and principal components if ZCA whitening is applied).
@@ -63,13 +64,13 @@ batch_size = 100
 num_epochs = 200
 
 training_generator = datagen.flow(X_train, Y_train, batch_size=batch_size, shuffle=True)
-validation_generator = datagen.flow(X_valid, Y_valid, batch_size=batch_size, shuffle=True)
+validation_generator = datagen.flow(X_test, Y_test, batch_size=batch_size, shuffle=True)
 
 my_classifier = ResNet18((32, 32, 3), 100)
 optimizer = SGD(lr=0.1, momentum=0.9, nesterov=True)
 my_classifier.compile(optimizer=optimizer, loss=categorical_crossentropy, metrics=['accuracy'])
 
-weights_folder = './resnet18_exp_sgd_no_zca_30'
+weights_folder = './resnet18_exp_sgd_weightdecay_no_valid'
 
 os.makedirs(weights_folder, exist_ok=True)
 weights_file = f'{weights_folder}/' \
@@ -90,7 +91,7 @@ def lr_scheduler(epoch, current_lr):
     :param current_lr: the current learning rate
     :return: the new learning rate
     """
-    return current_lr / 5 ** (epoch // 30)
+    return current_lr / 5 ** (epoch // 60)
 
 
 my_callbacks = [csv_logger, model_checkpoint, LearningRateScheduler(lr_scheduler)]  # lr_scheduler_callback , lr_reducer, early_stopper]

@@ -67,7 +67,7 @@ def pickle_embeddings(model,  pickle_name, dataset_name: str, training_ds_genera
     os.makedirs(f'./embeddings/{dataset_name}', exist_ok=True)
 
     with open(f'./embeddings/{dataset_name}/embeddings_for_{pickle_name}.pkl', 'wb') as pkl_out:
-        pickle.dump((embeddings, training_ds_generator.labels), pkl_out)
+        pickle.dump((embeddings, training_ds_generator.gt), pkl_out)
 
 
 def unpickle_embeddings(pickle_name: str, dataset_name: str):
@@ -141,7 +141,7 @@ if __name__ == '__main__':
     # checking predictions
     test_generator = data_genetator.MYGenerator(data_type='test', batch_size=batch_size, shuffle=True)
     y_pred = my_classifier.predict_generator(test_generator)
-    y_true = test_generator.labels
+    y_true = test_generator.gt
     predictions_masks = np_utils.to_categorical(y_pred.argmax(axis=-1))
     y_true = np.sum(y_true*predictions_masks, axis=-1)
 

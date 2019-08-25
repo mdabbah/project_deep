@@ -17,7 +17,8 @@ def shift(image, vector):
     shifted = warp(image, transform, mode='wrap', preserve_range=True)
 
     shifted = shifted.astype(image.dtype)
-    return  shifted
+    return shifted
+
 
 class MYGenerator(keras.utils.Sequence):
 
@@ -40,7 +41,7 @@ class MYGenerator(keras.utils.Sequence):
         self.images = self.images.reshape([-1, 1, *self.image_dims[:2]]).repeat(repeats=3, axis=1).transpose([0, 2, 3, 1])
 
         # those are the 'labels' for regression .. we shift them to be between [-1,1]
-        self.key_points = self.labels = (np.array(data.drop(columns=['Image'])) - self.image_dims[0]/2)/(self.image_dims[0]/2)
+        self.key_points = self.gt = (np.array(data.drop(columns=['Image'])) - self.image_dims[0] / 2) / (self.image_dims[0] / 2)
 
         #  this is for the stupidly complicated flipping --
         #  idea is that the right eye is now the left one and vice versa
@@ -60,7 +61,7 @@ class MYGenerator(keras.utils.Sequence):
             permute = np.random.permutation(num_samples)
             self.images = self.images[permute, :, :, :]
             self.key_points = self.key_points[permute, :]
-            self.labels = self.key_points
+            self.gt = self.key_points
 
         self.batch_size = batch_size
         self.horizontal_flip_prob = horizontal_flip_prob

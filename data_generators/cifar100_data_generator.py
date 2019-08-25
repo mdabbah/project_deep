@@ -103,13 +103,13 @@ class MYGenerator(keras.utils.Sequence):
         global X_train, X_test, X_valid
         if data_type == 'train':
             self.imgs = X_train
-            self.labels = Y_train
+            self.gt = Y_train
         elif data_type == 'valid':
             self.imgs = X_valid
-            self.labels = Y_valid
+            self.gt = Y_valid
         else:
             self.imgs = X_test
-            self.labels = Y_test
+            self.gt = Y_test
 
         if preprocessing_fun is None:
             preprocessing_fun = identity_preprocessing
@@ -121,12 +121,12 @@ class MYGenerator(keras.utils.Sequence):
             size = self.imgs.shape[0]
             permute = np.random.permutation(size)
             self.imgs = self.imgs[permute, :, :, :]
-            self.labels = self.labels[permute, :]
+            self.gt = self.gt[permute, :]
 
         self.batch_size = batch_size
 
     def __len__(self):
-        return np.int(np.ceil(len(self.labels) / float(self.batch_size)))
+        return np.int(np.ceil(len(self.gt) / float(self.batch_size)))
 
     def __getitem__(self, idx):
 
@@ -135,7 +135,7 @@ class MYGenerator(keras.utils.Sequence):
         #     batch_x = next(datagen.flow(batch_x, None, batch_size=self.batch_size, shuffle=False))
 
         batch_x = next(datagen.flow(batch_x, None, batch_size=self.batch_size, shuffle=False))
-        batch_y = self.labels[idx * self.batch_size: (idx + 1) * self.batch_size, :]
+        batch_y = self.gt[idx * self.batch_size: (idx + 1) * self.batch_size, :]
 
         # return resize(self.pre_processing_fun(batch_x), (batch_x.shape[0], *self.img_size)), batch_y
         return batch_x, batch_y

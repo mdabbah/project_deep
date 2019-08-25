@@ -17,7 +17,7 @@ class MYGenerator(keras.utils.Sequence):
             self.data = self.data.sample(frac=1)
 
         self.x_data = np.array(self.data.iloc[:, :-1])
-        self.y_data = self.labels = np.array(self.data.iloc[:, -1])
+        self.y_data = self.gt = np.array(self.data.iloc[:, -1])
         self.batch_size = batch_size
 
     def __len__(self):
@@ -36,4 +36,4 @@ class MYGenerator(keras.utils.Sequence):
         prem = np.random.permutation(self.x_data.shape[0])
         self.x_data = self.x_data[prem]
         self.y_data = self.y_data[prem]
-        self.labels = self.y_data
+        self.gt = self.y_data

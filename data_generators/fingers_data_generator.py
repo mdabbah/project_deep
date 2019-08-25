@@ -44,11 +44,11 @@ class MYGenerator(keras.utils.Sequence):
             permute = np.random.permutation(size)
             self.img_names = self.img_names[permute]
 
-        self.labels = [float(img.split('.png')[0][-2:-1]) for img in self.img_names]
+        self.gt = [float(img.split('.png')[0][-2:-1]) for img in self.img_names]
         self.batch_size = batch_size
 
     def __len__(self):
-        return np.int(np.ceil(len(self.labels) / float(self.batch_size)))
+        return np.int(np.ceil(len(self.gt) / float(self.batch_size)))
 
     def __getitem__(self, idx):
 
@@ -58,6 +58,6 @@ class MYGenerator(keras.utils.Sequence):
         if self.pre_processing_fun == identity_preprocessing:
             batch_x = next(datagen.flow(batch_x, None, batch_size=self.batch_size, shuffle=False))
 
-        batch_y = self.labels[idx * self.batch_size: (idx + 1) * self.batch_size, :]
+        batch_y = self.gt[idx * self.batch_size: (idx + 1) * self.batch_size, :]
 
         return resize(self.pre_processing_fun(batch_x), (batch_x.shape[0], *self.img_size)), batch_y

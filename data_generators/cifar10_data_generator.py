@@ -99,30 +99,30 @@ class MYGenerator(keras.utils.Sequence):
 
         if data_type == 'train':
             self.imgs = X_train
-            self.labels = Y_train
+            self.gt = Y_train
         elif data_type == 'valid':
             self.imgs = X_valid
-            self.labels = Y_valid
+            self.gt = Y_valid
         else:
             self.imgs = X_test
-            self.labels = Y_test
+            self.gt = Y_test
 
         if shuffle:
             size = self.imgs.shape[0]
             permute = np.random.permutation(size)
             self.imgs = self.imgs[permute, :, :, :]
-            self.labels = self.labels[permute, :]
+            self.gt = self.gt[permute, :]
 
         self.batch_size = batch_size
 
     def __len__(self):
-        return np.int(np.ceil(len(self.labels) / float(self.batch_size)))
+        return np.int(np.ceil(len(self.gt) / float(self.batch_size)))
 
     def __getitem__(self, idx):
 
         batch_x = next(datagen.flow(self.imgs[idx * self.batch_size: (idx + 1) * self.batch_size]
                                     , None, batch_size=self.batch_size, shuffle=False))\
 
-        batch_y = self.labels[idx * self.batch_size: (idx + 1) * self.batch_size, :]
+        batch_y = self.gt[idx * self.batch_size: (idx + 1) * self.batch_size, :]
 
         return batch_x, batch_y

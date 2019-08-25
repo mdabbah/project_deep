@@ -34,10 +34,10 @@ def calc_selective_risk(coverage: float, test_losses, uncertainty_on_validation,
     loss_on_covered = np.mean(test_losses[uncertainty_on_test < th])
     test_coverage = np.mean(uncertainty_on_test < th)
     risk = loss_on_covered / test_coverage
-    print(f'for given coverage: {coverage}, threshold is: {th},'
-          f' test coverage: {test_coverage}, '
-          f'test loss on coverd {loss_on_covered}, '
-          f'risk is: {risk}')
+    print(f'for given coverage: ,{coverage}, threshold is: ,{th :.6f},'
+          f' test coverage: ,{test_coverage:.6f}, '
+          f'test loss on covered ,{loss_on_covered :.6f}, '
+          f'risk is: ,{risk :.6f}')
 
     return np.mean(test_losses[uncertainty_on_test < th]) / np.mean(uncertainty_on_test < th)
 
@@ -47,6 +47,7 @@ def turn_on_dropout(model: Model, new_rate = 0.05):
     since keras doesn't have the option to turn on dropout on testing,
     my workaround is to replace the dropout layers which lambda layers that use dropout function
     that way it is always turned on
+    WARNING: works only on linear/sequential networks
     :param model: model to replace the dropout layers in
     :return: the updated model
     """
@@ -76,70 +77,85 @@ def MC_dropout_predictions(my_regressor: Model, test_generator, num_evaluations:
     :return: a tuple (predictions, uncertainty)
     """
 
-    predictions = np.zeros((num_evaluations, *test_generator.labels.shape))
-    model_dropout_turned_on = turn_on_dropout(my_regressor)
+    predictions = np.zeros((num_evaluations, *test_generator.gt.shape))
+    # old way
+    # model_dropout_turned_on = turn_on_dropout(my_regressor)
+    # new way
+    K.set_value(mc_dropout_rate, value=0.05)
+    model_dropout_turned_on = my_regressor
+
     for i in range(num_evaluations):
-        predictions[i, :] = np.squeeze(model_dropout_turned_on.predict_generator(test_generator))
+        predictions[i] = np.squeeze(model_dropout_turned_on.predict_generator(test_generator))
 
     uncertainty_per_test_sample = np.var(predictions, axis=0)
     if len(uncertainty_per_test_sample.shape) > 1:
+        # if we have more than one target per sample,
+        # our uncertainty in this test sample is the avg uncertainty for its targets
         uncertainty_per_test_sample = np.mean(uncertainty_per_test_sample, axis=-1)
     return np.mean(predictions, axis=0), uncertainty_per_test_sample
 
 
-def distance_predictions(my_regressor, my_encoder, test_generator, training_generator):
+def distance_predictions(my_regressor, test_generator, training_generator):
+    """
+    the uncertainty metric I suggested to contend with MC dropout.
+    this method returns the predictions on the test genertor and the uncertanty score
+    the uncertanty score for a test sample x is the distance squared from the nearest
+    training sample in the embedding space
+    the embedding is the output of the embedding layer in the regressor
+    :param my_regressor: a nn model for the problem, it should have a layer called 'embedding'
+    :param test_generator: a generator for the test samples
+    :param training_generator: a generator for the training samples
+    :return: predictions_on_testset, uncertainty_per_test_sample
+    """
 
+    # get training embeddings
     dataset_name = 'regression/' + test_generator.dataset_name
     model_name = my_regressor.name
     pkl = unpickle_embeddings(model_name, dataset_name)
     if not pkl:
-        pickle_embeddings(my_encoder, model_name, dataset_name, training_generator)
+        pickle_embeddings(my_regressor, model_name, dataset_name, training_generator)
         pkl = unpickle_embeddings(model_name, dataset_name)
 
     training_embeddings, training_targets = pkl
-    if len(training_targets.shape) == 1:
-        training_targets = np.expand_dims(training_targets, 1)
+
+    #  get teat embeddings
     layer_name = 'embedding'
-    encoder_model = Model(inputs=my_encoder.input,
-                          outputs=my_encoder.get_layer(layer_name).output)
+    encoder_model = Model(inputs=my_regressor.input,
+                          outputs=my_regressor.get_layer(layer_name).output)
     test_embeddings = encoder_model.predict_generator(test_generator)
 
-    batch_size = 32
-    num_training_samples = training_embeddings.shape[0]
+    # calculate the distances between each test sample and all training samples in embedding space
+    batch_size = 32  # done in "batches" because of memory constrains
     num_test_samples = test_embeddings.shape[0]
-    embedding_len_per_target = int(training_embeddings.shape[1]//training_targets.shape[1])  # we have y_true.shape[0] targets
 
     dists = np.zeros((test_embeddings.shape[0], training_embeddings.shape[0]))
     for bt in range(np.int(np.ceil(num_test_samples//batch_size))+1):
         test_embeddings_bt = test_embeddings[bt*batch_size:batch_size*(bt+1), :]
         if test_embeddings_bt.size == 0:
             break
-        actual_bt_size = test_embeddings_bt.shape[0]
-        mask = np.repeat(np.expand_dims(np.isnan(training_targets), axis=0), actual_bt_size, axis=0)
         batch_dists = np.sum(np.square(np.expand_dims(training_embeddings, 0) - np.expand_dims(test_embeddings_bt, 1)), axis=-1)
-        # batch_dists[mask] = np.inf
         dists[batch_size*bt:batch_size*(bt+1), :] = batch_dists
 
-    return my_regressor.predict_generator(test_generator), np.min(dists, axis=1)
+    predictions_on_test = my_regressor.predict_generator(test_generator)
+    uncertainty_per_test_sample = np.min(dists, axis=1)
+    return predictions_on_test, uncertainty_per_test_sample
 
 
 if __name__ == '__main__':
 
     # general params
-    data_set = 'facial_key_points'
-    loss_type = 'MSE'  # options 'l1_smoothed', 'distance_classifier'
+    data_set = 'concrete_strength'
     arch = 'facial_key_points_arc'
     uncertainty_metric = 'min_distance'  # options 'min_distance' , 'MC_dropout_std'
     batch_size = 32
     input_size = None
-    loss_function = MSE_updated
+    mc_dropout_rate = K.variable(value=0)
+    loss_function = lambda y,  y_hat: eval(MSE_updated(y, y_hat, return_vec=True))
     my_regressor = None
     training_generator = None
     validation_generator = None
     test_generator = None
     regressor_weights_path = None
-    my_encoder = None
-    encoder_weights_path = None
 
     # loading data
     if data_set == 'facial_key_points':
@@ -150,7 +166,17 @@ if __name__ == '__main__':
                                                           horizontal_flip_prob=0)
         test_generator = data_genetator.MYGenerator('test', batch_size, shuffle=True, use_nans=True,
                                                     horizontal_flip_prob=0)
+
+        from models.facial_keypoints_arc import FacialKeypointsArc as model
         input_size = 96, 96, 3
+        my_regressor = model(input_size, num_targets=30, num_last_hidden_units=480, mc_dropout_rate=mc_dropout_rate)
+        regressor_weights_path = r'./results/regression/MSE_updateds_facial_keypoints_arc_facial_key_points/' \
+                                 r'MSE_updated_facial_key_points_arc_ 478_0.003_0.002_0.00160_ 0.00296.h5'
+        encoder_weights_path = regressor_weights_path
+
+        # loss for evaluation is RMSE*48 (times 48 for rescaling to original problem values)
+        loss_function = lambda y,  y_hat: np.sqrt(eval(MSE_updated(y, y_hat, return_vec=True))) * 48
+
         print("evaluating on facial keypoints")
     elif data_set == 'fingers':
         raise ValueError("not supported yet")
@@ -161,42 +187,31 @@ if __name__ == '__main__':
         validation_generator = data_genetator.MYGenerator('valid', batch_size, True)
         test_generator = data_genetator.MYGenerator('test', batch_size, True)
         input_size = 8
-        my_regressor = model(input_size, 1)
-        my_encoder = model(input_size, 1, False)
+        my_regressor = model(input_size, 1, mc_dropout_rate=mc_dropout_rate)
         regressor_weights_path = r'./results/regression/l1_smooth_losss_simple_FCN_concrete_strength/' \
                        r'l1_smooth_loss_simple_FCN_ 659_3.177_3.137_27.02343_ 24.50994.h5'
-        encoder_weights_path = r'./results/regression/distance_by_x_encodings_simple_FCN_concrete_strength/' \
-                       r'distance_by_x_encoding_simple_FCN_ 778_0.000_0.000.h5'
-
-    # building the model
-    if data_set.startswith('facial'):
-        from models.facial_keypoints_arc import FacialKeypointsArc as model
-        my_regressor = model(input_size, 30, 480)
-        regressor_weights_path = r'./results/regression/distance_by_x_encodings_facial_key_points_arc_facial_key_points/' \
-                                 r'distance_by_x_encoding_facial_key_points_arc_ 440_0.003_0.002_0.00170_ 0.00293.h5'
-        encoder_weights_path = regressor_weights_path
-        my_encoder = my_regressor
+        regressor_weights_path = r'./results/regression/distance_by_x_encodings_simple_FCN_concrete_strength/' \
+                       r'distance_by_x_encoding_simple_FCN_ 573_32.042_31.230_26.25158_ 27.36713.h5'
 
     # load weights
-    my_encoder.name = 'encoder_' + os.path.split(encoder_weights_path)[-1][:-3]
+    my_regressor.name = os.path.split(regressor_weights_path)[-1][:-3]
     my_regressor.load_weights(regressor_weights_path)
-    my_encoder.load_weights(encoder_weights_path)
-    my_encoder = my_regressor
 
+    #  choose the uncertainty metric to evaluate
     if uncertainty_metric == 'MC_dropout_std':
         valid_predictions, valid_uncertainty = MC_dropout_predictions(my_regressor, validation_generator)
         test_predictions, test_uncertainty = MC_dropout_predictions(my_regressor, test_generator)
     else:
-        valid_predictions, valid_uncertainty = distance_predictions(my_regressor, my_encoder, validation_generator, training_generator)
-        test_predictions, test_uncertainty = distance_predictions(my_regressor, my_encoder, test_generator, training_generator)
+        valid_predictions, valid_uncertainty = distance_predictions(my_regressor, validation_generator, training_generator)
+        test_predictions, test_uncertainty = distance_predictions(my_regressor, test_generator, training_generator)
 
-    y_true = test_generator.labels if len(test_generator.labels.shape) > 1 else np.expand_dims(test_generator.labels, 1)
+    y_true = test_generator.gt if len(test_generator.gt.shape) > 1 else np.expand_dims(test_generator.gt, 1)
     y_pred = test_predictions if len(test_predictions.shape) > 1 else np.expand_dims(test_predictions, 1)
-    test_losses = np.sqrt(eval(MSE_updated(y_true, y_pred, return_vec=True)))*48
+    test_losses = loss_function(y_true, y_pred)
 
-    validation_MSE = eval(MSE_updated(validation_generator.labels, valid_predictions))
-    test_MSE = eval(MSE_updated(test_generator.labels, test_predictions))
-    print(f'valid err is {validation_MSE}, test err is {test_MSE}')
+    # validation_MSE = eval(MSE_updated(validation_generator.gt, valid_predictions))
+    # test_MSE = eval(MSE_updated(test_generator.gt, test_predictions))
+    # print(f'valid MSE is {validation_MSE}, test MSE is {test_MSE}')
 
     coverages = [0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1.]
     risk_coverages = np.zeros(len(coverages))
@@ -204,10 +219,7 @@ if __name__ == '__main__':
         risk_coverages[i] = calc_selective_risk(coverage=coverage, test_losses=test_losses,
                                                 uncertainty_on_validation=valid_uncertainty,
                                                 uncertainty_on_test=test_uncertainty)
-        # print(risk_covera/ges)
 
-    print(f'risk coverage numbers for {my_regressor.name} {uncertainty_metric} is {risk_coverages}')
     [print(str(c)) for c in risk_coverages]
-    print(f'AURC-CURVE is {np.sum(risk_coverages)}')
 
 
