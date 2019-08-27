@@ -8,6 +8,8 @@ from keras.utils import np_utils
 import numpy as np
 from keras_preprocessing.image import ImageDataGenerator
 from keras.losses import categorical_crossentropy
+from sklearn.model_selection import train_test_split
+
 
 # load data
 (X_train, y_train), (X_test, y_test) = cifar100.load_data()
@@ -22,19 +24,32 @@ X_train = X_train.astype('float32')
 X_test = X_test.astype('float32')
 
 
+def normalize(X_train, X_test):
+    '''
+    This function normalize inputs for zero mean and unit variance
+    Args:
+        X_train: np array of train samples, axis 0 is samples.
+        X_test: np array of test/validation samples, axis 0 is samples.
+    Returns:
+        A tuple (X_train, X_test), Normalized version of the data.
+    '''
+    mean = np.mean(X_train, axis=(0, 1, 2, 3))
+    std = np.std(X_train, axis=(0, 1, 2, 3))
+    X_train = (X_train - mean) / (std + 1e-7)
+    X_test = (X_test - mean) / (std + 1e-7)
+    return X_train, X_test
+
+
+X_train, X_test = normalize(X_train, X_test)
+
+
 np.random.seed(0)
 
-# CIFAR100_TRAIN_MEAN = (0.5070751592371323, 0.48654887331495095, 0.4409178433670343)
-# CIFAR100_TRAIN_STD = (0.2673342858792401, 0.2564384629170883, 0.27615047132568404)
-
-mean_image = np.mean(X_train, axis=0)
-X_train -= mean_image
-X_test -= mean_image
-X_train /= 128.
-X_test /= 128.
-
-
 # split data for validation
+X_train, X_valid, Y_train, Y_valid = train_test_split(X_train,
+                                                      Y_train,
+                                                      test_size=0.1,
+                                                      random_state=1)
 # num_training_samples = int(X_train.shape[0]*0.9)
 # X_valid = X_train[num_training_samples:, :, :, :]
 # X_train = X_train[:num_training_samples, :, :, :]
@@ -50,7 +65,7 @@ datagen = ImageDataGenerator(
     featurewise_std_normalization=False,  # divide inputs by std of the dataset
     samplewise_std_normalization=False,  # divide each input by its std
     zca_whitening=True,  # apply ZCA whitening
-    rotation_range=0,  # randomly rotate images in the range (degrees, 0 to 180)
+    rotation_range=15,  # randomly rotate images in the range (degrees, 0 to 180)
     width_shift_range=0.1,  # randomly shift images horizontally
     height_shift_range=0.1,  # randomly shift images vertically
     horizontal_flip=True,  # randomly flip images

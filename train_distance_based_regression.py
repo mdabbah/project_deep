@@ -9,6 +9,7 @@ import tensorflow as tf
 from keras.layers import Dense
 import os
 from keras.losses import MSE
+from keras.optimizers import Adam
 
 
 def distance_loss(encodeing_layer, batch_size=32, distance_margin = 25, distance_loss_coeff = 0.2,
@@ -177,9 +178,9 @@ loss_functions_cache = {'MSE': MSE, 'MSE_updated': MSE_updated, 'l1_smooth_loss_
 if __name__ == '__main__':
 
     # wheere to save weights , dataset & training details change if needed
-    data_set = 'facial_key_points'
-    training_type = 'distance_by_x_encoding'  # options 'l1_smoothed', 'distance_classifier'
-    arch = 'facial_key_points_arc'
+    data_set = 'concrete_strength'
+    training_type = 'distance_by_x_encoding'  # options 'l1_smooth_loss', 'distance_by_x_encoding'
+    arch = 'simple_FCN'
     weights_folder = f'./results/regression/{training_type}s_{arch}_{data_set}'
     os.makedirs(weights_folder, exist_ok=True)
     weights_file = f'{weights_folder}/{training_type}_{arch}' \
@@ -208,7 +209,7 @@ if __name__ == '__main__':
     batch_size = 32
     num_epochs = 600
     # distance_margin = 25
-    distance_loss_coeff = 0.0007
+    distance_loss_coeff = 2
     shuffle = True
     input_size = (96, 96, 3)
     my_regressor = None
@@ -216,18 +217,14 @@ if __name__ == '__main__':
     flip_prob = 0.3
     my_training_generator = None
     my_validation_generator = None
+    optimizer = 'adadelta'
+
 
     # choosing arch and optimizer
     if data_set.startswith('facial'):
-        if arch.startswith('ELU_arc'):
-            from models.distance_classifier import DistanceClassifier
-            base_model = DistanceClassifier(input_size, num_classes=None, include_top=False)
-            x = base_model.output
-            x = Dense(30, activation='linear')(x)
-            my_regressor = Model(base_model.input, x, name=f'{data_set} regression model')
-        else:
-            from models.facial_keypoints_arc import FacialKeypointsArc
-            my_regressor = FacialKeypointsArc(input_size, 30, 480)
+
+        from models.facial_keypoints_arc import FacialKeypointsArc
+        my_regressor = FacialKeypointsArc(input_size, 30, 480)
 
         my_training_generator = data_genetator.MYGenerator(data_type='train', batch_size=batch_size, shuffle=shuffle,
                                                            use_nans=use_nans, horizontal_flip_prob=flip_prob)
@@ -238,11 +235,11 @@ if __name__ == '__main__':
         from models.concrete_strength_arc import simple_FCN
         my_regressor = simple_FCN(8, 1)
 
-        num_epochs = 800
-        batch_size = 32
+        num_epochs = 1600
+        batch_size = 256
         my_training_generator = data_genetator.MYGenerator(data_type='train', batch_size=batch_size, shuffle=True)
         my_validation_generator = data_genetator.MYGenerator(data_type='valid', batch_size=batch_size, shuffle=True)
-    optimizer = 'adadelta'
+        optimizer = Adam(lr=5*1.e-4)
 
     num_training_xsamples_per_epoch = len(my_training_generator)
     num_validation_xsamples_per_epoch = len(my_validation_generator)

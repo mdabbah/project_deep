@@ -28,7 +28,6 @@ def calc_selective_risk(coverage: float, test_losses, uncertainty_on_validation,
      sample i
     :return: selective risk
     """
-    uncertainty_on_validation = np.sort(uncertainty_on_validation)
     th = np.percentile(uncertainty_on_validation, coverage * 100)
 
     loss_on_covered = np.mean(test_losses[uncertainty_on_test < th])
@@ -39,7 +38,7 @@ def calc_selective_risk(coverage: float, test_losses, uncertainty_on_validation,
           f'test loss on covered ,{loss_on_covered :.6f}, '
           f'risk is: ,{risk :.6f}')
 
-    return np.mean(test_losses[uncertainty_on_test < th]) / np.mean(uncertainty_on_test < th)
+    return np.mean(test_losses[uncertainty_on_test < th])
 
 
 def turn_on_dropout(model: Model, new_rate = 0.05):
@@ -144,9 +143,9 @@ def distance_predictions(my_regressor, test_generator, training_generator):
 if __name__ == '__main__':
 
     # general params
-    data_set = 'concrete_strength'
+    data_set = 'concrete_strength'  # concrete_strength ,  facial_key_points
     arch = 'facial_key_points_arc'
-    uncertainty_metric = 'min_distance'  # options 'min_distance' , 'MC_dropout_std'
+    uncertainty_metric = 'MC_dropout_std'  # options 'min_distance' , 'MC_dropout_std'
     batch_size = 32
     input_size = None
     mc_dropout_rate = K.variable(value=0)
@@ -190,8 +189,8 @@ if __name__ == '__main__':
         my_regressor = model(input_size, 1, mc_dropout_rate=mc_dropout_rate)
         regressor_weights_path = r'./results/regression/l1_smooth_losss_simple_FCN_concrete_strength/' \
                        r'l1_smooth_loss_simple_FCN_ 659_3.177_3.137_27.02343_ 24.50994.h5'
-        regressor_weights_path = r'./results/regression/distance_by_x_encodings_simple_FCN_concrete_strength/' \
-                       r'distance_by_x_encoding_simple_FCN_ 573_32.042_31.230_26.25158_ 27.36713.h5'
+        # regressor_weights_path = r'./results/regression/distance_by_x_encodings_simple_FCN_concrete_strength/' \
+        #                r'distance_by_x_encoding_simple_FCN_ 573_32.042_31.230_26.25158_ 27.36713.h5'
 
     # load weights
     my_regressor.name = os.path.split(regressor_weights_path)[-1][:-3]
