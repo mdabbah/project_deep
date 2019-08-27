@@ -85,7 +85,7 @@ my_classifier = ResNet18((32, 32, 3), 100)
 optimizer = SGD(lr=0.1, momentum=0.9, nesterov=True)
 my_classifier.compile(optimizer=optimizer, loss=categorical_crossentropy, metrics=['accuracy'])
 
-weights_folder = './resnet18_exp_sgd_weightdecay_no_valid'
+weights_folder = './resnet18_exp_sgd_yon'
 
 os.makedirs(weights_folder, exist_ok=True)
 weights_file = f'{weights_folder}/' \
@@ -109,7 +109,24 @@ def lr_scheduler(epoch, current_lr):
     return current_lr / 5 ** (epoch // 60)
 
 
-my_callbacks = [csv_logger, model_checkpoint, LearningRateScheduler(lr_scheduler)]  # lr_scheduler_callback , lr_reducer, early_stopper]
+def lr_schedule(epoch):
+    """Learning Rate Schedule
+    Learning rate is scheduled to be reduced after 100, 150 epochs.
+    Called automatically every epoch as part of callbacks during training.
+    # Arguments
+        epoch (int): The number of epochs
+    # Returns
+        lr (float32): learning rate
+    """
+    lr = 0.1
+    if epoch > 100:
+        lr = 0.01
+    if epoch > 150:
+        lr = 0.001
+    return lr
+
+
+my_callbacks = [csv_logger, model_checkpoint, LearningRateScheduler(lr_schedule)]  # lr_scheduler_callback , lr_reducer, early_stopper]
 
 # start training
 my_classifier.fit_generator(training_generator,
