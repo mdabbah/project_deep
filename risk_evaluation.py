@@ -140,12 +140,15 @@ def distance_predictions(my_regressor, test_generator, training_generator):
     return predictions_on_test, uncertainty_per_test_sample
 
 
+def accuracy(y_true, y_pred):
+    return np.mean(y_true == y_pred.round())
+
+
 if __name__ == '__main__':
 
     # general params
-    data_set = 'concrete_strength'  # concrete_strength ,  facial_key_points
-    arch = 'facial_key_points_arc'
-    uncertainty_metric = 'MC_dropout_std'  # options 'min_distance' , 'MC_dropout_std'
+    data_set = 'mnist'  # concrete_strength ,  facial_key_points , mnist
+    uncertainty_metric = 'min_distance'  # options 'min_distance' , 'MC_dropout_std'
     batch_size = 32
     input_size = None
     mc_dropout_rate = K.variable(value=0)
@@ -191,6 +194,19 @@ if __name__ == '__main__':
                        r'l1_smooth_loss_simple_FCN_ 659_3.177_3.137_27.02343_ 24.50994.h5'
         # regressor_weights_path = r'./results/regression/distance_by_x_encodings_simple_FCN_concrete_strength/' \
         #                r'distance_by_x_encoding_simple_FCN_ 573_32.042_31.230_26.25158_ 27.36713.h5'
+    if data_set == 'mnist':
+        from data_generators import mnist_data_generator as data_genetator
+        from models.mnist_simple_arc import mnist_simple_arc as model
+
+        training_generator = data_genetator.MYGenerator('train')
+        validation_generator = data_genetator.MYGenerator('valid', batch_size, augment=True)
+        test_generator = data_genetator.MYGenerator('test', batch_size, augment=True)
+        input_size = 28, 28, 1
+        my_regressor = model(input_size, 1, mc_dropout_rate=mc_dropout_rate)
+        regressor_weights_path = r'./results/regression/distance_by_x_encodings_simple_CNN_mnist/' \
+                                 r'distance_by_x_encoding_simple_CNN_ 45_0.114_0.304_0.28383_ 0.104280.72587_ 0.98250.h5'
+
+        loss_function = accuracy
 
     # load weights
     my_regressor.name = os.path.split(regressor_weights_path)[-1][:-3]

@@ -25,34 +25,42 @@ def distance_loss(encodeing_layer, batch_size=32, distance_margin = 25, distance
     print("generating distance loss function ...")
 
     def loss(y_true, y_pred):
-
         # batch_size = int(y_true.shape[0])
         embeddings = encodeing_layer.output
-        batch_size = tf.shape(embeddings)[0]
-        # filter out embeddings that had no associated regression target
-        is_nan_mask = tf.is_nan(y_true)
-        num_repeats = tf.shape(embeddings)[-1]//tf.shape(y_true)[-1]
-
+        eps = 0.0015
         # calculate the embeddings distance from each other in the current batch
-        squared_dists = tf.reduce_sum(tf.reshape(tf.squared_difference(K.expand_dims(embeddings, 0),
-                                                                       tf.expand_dims(embeddings, 1)),
-                                                 shape=(batch_size, batch_size, -1, num_repeats)), axis=-1)
+        # norms = tf.norm(K.expand_dims(embeddings, 0)``1vcxc>\ - tf.expand_dims(embeddings, 1), axis=2)
+        norms = tf.reduce_sum(tf.squared_difference(K.expand_dims(embeddings, 0), tf.expand_dims(embeddings, 1)),
+                              axis=2)
+        # norms = tf.sqrt(norms + eps)
 
-        # filter embedding parts where target isn't well defined
-        is_nan_mask = tf.logical_or(tf.expand_dims(is_nan_mask, 0), tf.expand_dims(is_nan_mask, 1))
-        squared_dists = tf.where(is_nan_mask, tf.zeros_like(squared_dists), squared_dists)
+        # no sqrt implementation:
+        # norms = tf.reduce_sum(tf.squared_difference(K.expand_dims(embeddings, 0), tf.expand_dims(embeddings, 1)), axis=2)
 
         # the original classification loss
-        total_loss = MSE_updated(y_true, y_pred)
+        total_loss = K.categorical_crossentropy(y_true, y_pred)
+        total_loss = tf.reduce_mean(total_loss)
+        print_op_pred = tf.print("classification loss: ", total_loss)  # print it
+
+        # boolean matrix s.t. in entry (i,j) is 1 iff label_i == label_j
+        y_true = tf.one_hot(y_true)
+        y_eq = tf.matmul(y_true, tf.transpose(y_true))
+        num_pairs = tf.cast((tf.shape(y_eq)[0]) ** 2, tf.float32)
+        print_op = tf.print("eq. pairs percentage: ",
+                            tf.reduce_sum(y_eq) / num_pairs)  # print how manny pairs are equal
+        print_batch_sz = tf.print("num pairs", num_pairs)
 
         # the proposed distance loss
-        distance_loss_eq = tf.reduce_sum(squared_dists)
+        distance_loss_eq = tf.reduce_sum(tf.boolean_mask(norms, y_eq - tf.eye(tf.shape(y_eq)[0],
+                                                                              dtype=tf.float32))) / num_pairs  # loss for pairs with the same label
+        distance_loss_diff = tf.reduce_sum(tf.maximum(0., distance_margin - tf.boolean_mask(norms,
+                                                                                            1 - y_eq))) / num_pairs  # loss for pairs with different label
         # print them
-        print_op2 = tf.print("\nloss equals: \n", distance_loss_eq)
-        print_embedd_size = tf.print('embedding_size \n', tf.shape(embeddings))
+        print_op2 = tf.print("loss equals: ", distance_loss_eq)
+        print_op3 = tf.print("loss diff: ", distance_loss_diff)
 
-        total_loss += distance_loss_eq  * distance_loss_coeff
-        with tf.control_dependencies([print_op2, print_embedd_size]):
+        total_loss += (distance_loss_eq + distance_loss_diff) * distance_loss_coeff
+        with tf.control_dependencies([print_op, print_op2, print_op3, print_batch_sz]):
             return total_loss
 
     def loss_by_x_embedding(y_true, y_pred):
@@ -172,15 +180,21 @@ def MSE_updated(y_true, y_pred, return_vec: bool = False):
     return tf.math.reduce_mean(total_loss)
 
 
+def accuracy(y_true, y_pred):
+    y_pred = tf.cast(tf.round(y_pred), tf.int32)
+    y_true = tf.cast(y_true, tf.int32)
+    return tf.reduce_mean(tf.cast(tf.equal(y_pred, y_true), tf.float32))
+
+
 loss_functions_cache = {'MSE': MSE, 'MSE_updated': MSE_updated, 'l1_smooth_loss_updated': l1_smooth_loss_updated,
                         'l1_smooth_loss': tf.losses.huber_loss}
 
 if __name__ == '__main__':
 
     # wheere to save weights , dataset & training details change if needed
-    data_set = 'concrete_strength'
+    data_set = 'mnist'
     training_type = 'distance_by_x_encoding'  # options 'l1_smooth_loss', 'distance_by_x_encoding'
-    arch = 'simple_FCN'
+    arch = 'simple_CNN'
     weights_folder = f'./results/regression/{training_type}s_{arch}_{data_set}'
     os.makedirs(weights_folder, exist_ok=True)
     weights_file = f'{weights_folder}/{training_type}_{arch}' \
@@ -197,19 +211,12 @@ if __name__ == '__main__':
                                        save_weights_only=True, mode='min')
     my_callbacks = [csv_logger, model_checkpoint]  # lr_scheduler_callback , lr_reducer, early_stopper]
 
-    # loading data
-    if data_set == 'facial_key_points':
-        from data_generators import facial_keypoints_data_generator as data_genetator
-
-        print("training on facial keypoints")
-    elif data_set == 'fingers':
-        raise ValueError("not supported yet")
 
     # training constants, change if needed
     batch_size = 32
     num_epochs = 600
     # distance_margin = 25
-    distance_loss_coeff = 2
+    distance_loss_coeff = 0.02
     shuffle = True
     input_size = (96, 96, 3)
     my_regressor = None
@@ -218,28 +225,45 @@ if __name__ == '__main__':
     my_training_generator = None
     my_validation_generator = None
     optimizer = 'adadelta'
+    metrics = [MSE_updated]
 
-
-    # choosing arch and optimizer
+    # choosing arch and optimizer  and  loading data
     if data_set.startswith('facial'):
-
+        from data_generators import facial_keypoints_data_generator as data_generator
         from models.facial_keypoints_arc import FacialKeypointsArc
         my_regressor = FacialKeypointsArc(input_size, 30, 480)
 
-        my_training_generator = data_genetator.MYGenerator(data_type='train', batch_size=batch_size, shuffle=shuffle,
+        my_training_generator = data_generator.MYGenerator(data_type='train', batch_size=batch_size, shuffle=shuffle,
                                                            use_nans=use_nans, horizontal_flip_prob=flip_prob)
-        my_validation_generator = data_genetator.MYGenerator(data_type='valid', batch_size=batch_size, shuffle=shuffle,
+        my_validation_generator = data_generator.MYGenerator(data_type='valid', batch_size=batch_size, shuffle=shuffle,
                                                              use_nans=use_nans, horizontal_flip_prob=flip_prob)
+
     elif data_set.startswith('concrete'):
-        from data_generators import concrete_dataset_generator as data_genetator
+        from data_generators import concrete_dataset_generator as data_generator
         from models.concrete_strength_arc import simple_FCN
         my_regressor = simple_FCN(8, 1)
 
         num_epochs = 1600
         batch_size = 256
-        my_training_generator = data_genetator.MYGenerator(data_type='train', batch_size=batch_size, shuffle=True)
-        my_validation_generator = data_genetator.MYGenerator(data_type='valid', batch_size=batch_size, shuffle=True)
+        my_training_generator = data_generator.MYGenerator(data_type='train', batch_size=batch_size, shuffle=True)
+        my_validation_generator = data_generator.MYGenerator(data_type='valid', batch_size=batch_size, shuffle=True)
         optimizer = Adam(lr=5*1.e-4)
+
+    elif data_set.startswith('mnist'):
+        from data_generators import mnist_data_generator as data_generator
+        from models.mnist_simple_arc import mnist_simple_arc
+        my_regressor = mnist_simple_arc()
+
+        num_epochs = 50
+        batch_size = 100
+        my_training_generator = data_generator.MYGenerator(data_type='train', batch_size=batch_size, shuffle=True)
+        my_validation_generator = data_generator.MYGenerator(data_type='valid', batch_size=batch_size, shuffle=True)
+        optimizer = 'adam'
+        weights_file = weights_file[:-3] + '{accuracy:.5f}_{val_accuracy: .5f}.h5'
+        model_checkpoint = ModelCheckpoint(weights_file, monitor='val_accuracy', save_best_only=True,
+                                           save_weights_only=True, mode='max')
+        my_callbacks[-1] = model_checkpoint
+        metrics.append(accuracy)
 
     num_training_xsamples_per_epoch = len(my_training_generator)
     num_validation_xsamples_per_epoch = len(my_validation_generator)
@@ -252,7 +276,8 @@ if __name__ == '__main__':
     else:
         loss_function = loss_functions_cache[training_type]
 
-    my_regressor.compile(optimizer=optimizer, loss=loss_function, metrics=[MSE_updated, *embeddings_avg_distance_metric(encoder, 'both')])
+    metrics.extend(embeddings_avg_distance_metric(encoder, 'both'))
+    my_regressor.compile(optimizer=optimizer, loss=loss_function, metrics=metrics)
 
     # start training
     my_regressor.fit_generator(my_training_generator,
@@ -264,7 +289,7 @@ if __name__ == '__main__':
                                workers=1,
                                use_multiprocessing=0)
 
-    test_generator = data_genetator.MYGenerator(data_type='test', batch_size=batch_size, shuffle=True,
+    test_generator = data_generator.MYGenerator(data_type='test', batch_size=batch_size, shuffle=True,
                                                 use_nans=True, horizontal_flip_prob=0)
 
     # check acc

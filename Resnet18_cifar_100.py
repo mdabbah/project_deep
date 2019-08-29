@@ -79,13 +79,15 @@ batch_size = 100
 num_epochs = 200
 
 training_generator = datagen.flow(X_train, Y_train, batch_size=batch_size, shuffle=True)
-validation_generator = datagen.flow(X_test, Y_test, batch_size=batch_size, shuffle=True)
+validation_generator = datagen.flow(X_valid, Y_valid, batch_size=batch_size, shuffle=True)
 
-my_classifier = ResNet18((32, 32, 3), 100)
+from cifar100_resnet import Cifar100Resnet
+
+my_classifier = Cifar100Resnet(structure=[2, 2, 2, 2]).model
 optimizer = SGD(lr=0.1, momentum=0.9, nesterov=True)
 my_classifier.compile(optimizer=optimizer, loss=categorical_crossentropy, metrics=['accuracy'])
 
-weights_folder = './resnet18_exp_sgd_yon'
+weights_folder = './resnet18_exp_sgd_yon_model'
 
 os.makedirs(weights_folder, exist_ok=True)
 weights_file = f'{weights_folder}/' \
@@ -137,4 +139,8 @@ my_classifier.fit_generator(training_generator,
                             validation_steps=len(validation_generator),
                             workers=1,
                             use_multiprocessing=0)
+
+test_generator = datagen.flow(X_test, Y_test, batch_size=batch_size, shuffle=True)
+loss, acc = my_classifier.evaluate_generator(test_generator)
+print(f'loss is {loss} acc is {acc}')
 
