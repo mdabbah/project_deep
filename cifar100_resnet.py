@@ -1,5 +1,9 @@
 from __future__ import print_function
+
+import os
+
 import keras
+from keras.callbacks import CSVLogger, ModelCheckpoint
 from keras.datasets import cifar100
 from keras.preprocessing.image import ImageDataGenerator
 from keras.layers import Dense, Dropout, Activation, Flatten, Input, Lambda
@@ -219,7 +223,7 @@ class Cifar100Resnet:
                                                                 y_train,
                                                                 test_size=0.1,
                                                                 random_state=1)
-            verbose = 0
+            verbose = 1
         # training parameters
         batch_size = 128
         learning_rate = 0.1
@@ -240,6 +244,16 @@ class Cifar100Resnet:
                 lr = 0.001
             return lr
 
+        weights_folder = './resnet18_final'
+
+        os.makedirs(weights_folder, exist_ok=True)
+        weights_file = f'{weights_folder}/' \
+            '_{epoch: 03d}_{val_acc:.3f}_{val_loss:.3f}_{acc:.3f}_{loss:.3f}.h5'
+
+        # callbacks change if needed
+        csv_logger = CSVLogger(f'{weights_folder}.csv')
+        model_checkpoint = ModelCheckpoint(weights_file, monitor='val_acc', save_best_only=True,
+                                           save_weights_only=True, mode='auto')
         # data augmentation
         datagen = ImageDataGenerator(
             featurewise_center=False,  # set input mean to 0 over the dataset
@@ -268,7 +282,7 @@ class Cifar100Resnet:
                                                    steps_per_epoch=50000 // batch_size,
                                                    epochs=max_epoches,
                                                    validation_data=(x_test, y_test),
-                                                   callbacks=[lr_scheduler],
+                                                   callbacks=[lr_scheduler, csv_logger, model_checkpoint],
                                                  verbose=verbose)
         self.accuracy = train_history.history['val_acc'][-1]
         self.max_accuracy = max(train_history.history['val_acc'])
@@ -277,4 +291,5 @@ class Cifar100Resnet:
 
 
 if __name__ == '__main__':
-    model = Cifar100Resnet()
+    model = Cifar100Resnet(structure=[2, 2, 2, 2])
+    model.train()

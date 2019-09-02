@@ -25,6 +25,7 @@ def distance_loss(encodeing_layer, batch_size=32, distance_margin = 25, distance
     print("generating distance loss function ...")
 
     def loss(y_true, y_pred):
+
         # batch_size = int(y_true.shape[0])
         embeddings = encodeing_layer.output
         eps = 0.0015

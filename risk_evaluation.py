@@ -63,7 +63,7 @@ def turn_on_dropout(model: Model, new_rate = 0.05):
     return new_model
 
 
-def MC_dropout_predictions(my_regressor: Model, test_generator, num_evaluations: int = 200):
+def MC_dropout_predictions(my_regressor: Model, test_generator, mc_dropout_rate, num_evaluations: int = 200):
     """
     replacing the model with a new model where its dropouts are turned on during testing as well
     in order to preform MC dropout evaluation
@@ -75,8 +75,9 @@ def MC_dropout_predictions(my_regressor: Model, test_generator, num_evaluations:
     :param num_evaluations: # evaluations
     :return: a tuple (predictions, uncertainty)
     """
-
-    predictions = np.zeros((num_evaluations, *test_generator.gt.shape))
+    outpu_shape = my_regressor.layers[-1].output_shape[1:]
+    num_test_samples = test_generator.gt.shape[0]
+    predictions = np.zeros((num_evaluations, num_test_samples ,*outpu_shape))
     # old way
     # model_dropout_turned_on = turn_on_dropout(my_regressor)
     # new way
@@ -84,7 +85,7 @@ def MC_dropout_predictions(my_regressor: Model, test_generator, num_evaluations:
     model_dropout_turned_on = my_regressor
 
     for i in range(num_evaluations):
-        predictions[i] = np.squeeze(model_dropout_turned_on.predict_generator(test_generator))
+        predictions[i] = model_dropout_turned_on.predict_generator(test_generator).squeeze()
 
     uncertainty_per_test_sample = np.var(predictions, axis=0)
     if len(uncertainty_per_test_sample.shape) > 1:
@@ -124,7 +125,7 @@ def distance_predictions(my_regressor, test_generator, training_generator):
     test_embeddings = encoder_model.predict_generator(test_generator)
 
     # calculate the distances between each test sample and all training samples in embedding space
-    batch_size = 32  # done in "batches" because of memory constrains
+    batch_size = 100  # done in "batches" because of memory constrains
     num_test_samples = test_embeddings.shape[0]
 
     dists = np.zeros((test_embeddings.shape[0], training_embeddings.shape[0]))
@@ -137,22 +138,25 @@ def distance_predictions(my_regressor, test_generator, training_generator):
 
     predictions_on_test = my_regressor.predict_generator(test_generator)
     uncertainty_per_test_sample = np.min(dists, axis=1)
+    if test_generator == training_generator:
+        uncertainty_per_test_sample = np.sort(dists, axis=1)[:, 1]
     return predictions_on_test, uncertainty_per_test_sample
 
 
 def accuracy(y_true, y_pred):
-    return np.mean(y_true == y_pred.round())
+    return y_true == y_pred.round()
 
 
 if __name__ == '__main__':
 
     # general params
-    data_set = 'mnist'  # concrete_strength ,  facial_key_points , mnist
+    data_set = 'concrete_strength'  # concrete_strength ,  facial_key_points , mnist
     uncertainty_metric = 'min_distance'  # options 'min_distance' , 'MC_dropout_std'
+    num_trials = 5
     batch_size = 32
     input_size = None
     mc_dropout_rate = K.variable(value=0)
-    loss_function = lambda y,  y_hat: eval(MSE_updated(y, y_hat, return_vec=True))
+    loss_function = lambda y,  y_hat: eval(MSE_updated(y+0., y_hat+0., return_vec=True))
     my_regressor = None
     training_generator = None
     validation_generator = None
@@ -174,6 +178,8 @@ if __name__ == '__main__':
         my_regressor = model(input_size, num_targets=30, num_last_hidden_units=480, mc_dropout_rate=mc_dropout_rate)
         regressor_weights_path = r'./results/regression/MSE_updateds_facial_keypoints_arc_facial_key_points/' \
                                  r'MSE_updated_facial_key_points_arc_ 478_0.003_0.002_0.00160_ 0.00296.h5'
+        regressor_weights_path = r'./results/regression/distance_by_x_encodings_facial_key_points_arc_facial_key_points/' \
+                                 r'distance_by_x_encoding_facial_key_points_arc_ 440_0.003_0.002_0.00170_ 0.00293.h5'
         encoder_weights_path = regressor_weights_path
 
         # loss for evaluation is RMSE*48 (times 48 for rescaling to original problem values)
@@ -191,20 +197,26 @@ if __name__ == '__main__':
         input_size = 8
         my_regressor = model(input_size, 1, mc_dropout_rate=mc_dropout_rate)
         regressor_weights_path = r'./results/regression/l1_smooth_losss_simple_FCN_concrete_strength/' \
-                       r'l1_smooth_loss_simple_FCN_ 659_3.177_3.137_27.02343_ 24.50994.h5'
+                                 r'l1_smooth_loss_simple_FCN_ 659_3.177_3.137_27.02343_ 24.50994.h5'
+        regressor_weights_path = r'./results/regression/MSEs_simple_FCN_concrete_strength/' \
+                                 r'MSE_simple_FCN_ 432_28.321_21.416_21.41648_ 28.32056.h5'
         # regressor_weights_path = r'./results/regression/distance_by_x_encodings_simple_FCN_concrete_strength/' \
         #                r'distance_by_x_encoding_simple_FCN_ 573_32.042_31.230_26.25158_ 27.36713.h5'
     if data_set == 'mnist':
         from data_generators import mnist_data_generator as data_genetator
         from models.mnist_simple_arc import mnist_simple_arc as model
+        batch_size = 100
 
         training_generator = data_genetator.MYGenerator('train')
-        validation_generator = data_genetator.MYGenerator('valid', batch_size, augment=True)
+        validation_generator = data_genetator.MYGenerator('valid', batch_size, augment=False)
         test_generator = data_genetator.MYGenerator('test', batch_size, augment=True)
         input_size = 28, 28, 1
         my_regressor = model(input_size, 1, mc_dropout_rate=mc_dropout_rate)
         regressor_weights_path = r'./results/regression/distance_by_x_encodings_simple_CNN_mnist/' \
                                  r'distance_by_x_encoding_simple_CNN_ 45_0.114_0.304_0.28383_ 0.104280.72587_ 0.98250.h5'
+
+        # regressor_weights_path = r'./results/regression/MSEs_simple_CNN_mnist/' \
+        #                          r'MSE_simple_CNN_ 42_0.106_0.309_0.30944_ 0.106200.71219_ 0.97617.h5'
 
         loss_function = accuracy
 
@@ -212,29 +224,49 @@ if __name__ == '__main__':
     my_regressor.name = os.path.split(regressor_weights_path)[-1][:-3]
     my_regressor.load_weights(regressor_weights_path)
 
-    #  choose the uncertainty metric to evaluate
-    if uncertainty_metric == 'MC_dropout_std':
-        valid_predictions, valid_uncertainty = MC_dropout_predictions(my_regressor, validation_generator)
-        test_predictions, test_uncertainty = MC_dropout_predictions(my_regressor, test_generator)
-    else:
-        valid_predictions, valid_uncertainty = distance_predictions(my_regressor, validation_generator, training_generator)
-        test_predictions, test_uncertainty = distance_predictions(my_regressor, test_generator, training_generator)
+    loss_functions = [accuracy, lambda y, y_hat: eval(MSE_updated(y + 0., y_hat + 0., return_vec=True))]
+    # test_generator = validation_generator
+    # test_predictions = my_regressor.predict_generator(test_generator)
+    # for loss_function in loss_functions:
+    #     print(f'current loss function {loss_function.__name__} \n')
+    #     y_true = test_generator.gt if len(test_generator.gt.shape) > 1 else np.expand_dims(test_generator.gt, 1)
+    #     y_pred = test_predictions if len(test_predictions.shape) > 1 else np.expand_dims(test_predictions, 1)
+    #     test_MSE = loss_function(y_true, y_pred).mean()
+    #     print(f'test MSE is {test_MSE}')
 
-    y_true = test_generator.gt if len(test_generator.gt.shape) > 1 else np.expand_dims(test_generator.gt, 1)
-    y_pred = test_predictions if len(test_predictions.shape) > 1 else np.expand_dims(test_predictions, 1)
-    test_losses = loss_function(y_true, y_pred)
+    for i in range(num_trials):
+        print(f'trail number {i}\n')
+        #  choose the uncertainty metric to evaluate
+        if uncertainty_metric == 'MC_dropout_std':
+            valid_predictions, valid_uncertainty = MC_dropout_predictions(my_regressor, validation_generator, mc_dropout_rate)
+            test_predictions, test_uncertainty = MC_dropout_predictions(my_regressor, test_generator, mc_dropout_rate)
+        else:
+            valid_predictions, valid_uncertainty = distance_predictions(my_regressor, validation_generator, training_generator)
+            test_predictions, test_uncertainty = distance_predictions(my_regressor, test_generator, training_generator)
 
-    # validation_MSE = eval(MSE_updated(validation_generator.gt, valid_predictions))
-    # test_MSE = eval(MSE_updated(test_generator.gt, test_predictions))
-    # print(f'valid MSE is {validation_MSE}, test MSE is {test_MSE}')
+        y_true = test_generator.gt if len(test_generator.gt.shape) > 1 else np.expand_dims(test_generator.gt, 1)
+        y_pred = test_predictions if len(test_predictions.shape) > 1 else np.expand_dims(test_predictions, 1)
+        test_losses = loss_function(y_true, y_pred)
 
-    coverages = [0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1.]
-    risk_coverages = np.zeros(len(coverages))
-    for i, coverage in enumerate(coverages):
-        risk_coverages[i] = calc_selective_risk(coverage=coverage, test_losses=test_losses,
-                                                uncertainty_on_validation=valid_uncertainty,
-                                                uncertainty_on_test=test_uncertainty)
+        yval_true = validation_generator.gt if len(validation_generator.gt.shape) > 1 else np.expand_dims(validation_generator.gt, 1)
+        yval_pred = valid_predictions if len(valid_predictions.shape) > 1 else np.expand_dims(valid_predictions, 1)
+        validation_MSE = eval(MSE_updated(yval_true + 0., yval_pred + 0.))
+        test_MSE = eval(MSE_updated(y_true+0., y_pred+0.))
+        print(f'valid MSE is {validation_MSE}, test MSE is {test_MSE}')
 
-    [print(str(c)) for c in risk_coverages]
+        loss_functions = [lambda y,  y_hat: eval(MSE_updated(y+0., y_hat+0., return_vec=True))]
+        for loss_function in loss_functions:
+            print(f'current loss function {loss_function.__name__} \n')
+            test_losses = loss_function(y_true, y_pred)
+
+            coverages = [0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1.]
+            risk_coverages = np.zeros(len(coverages))
+            for i, coverage in enumerate(coverages):
+                risk_coverages[i] = calc_selective_risk(coverage=coverage, test_losses=test_losses,
+                                                        uncertainty_on_validation=valid_uncertainty,
+                                                        uncertainty_on_test=test_uncertainty)
+
+            [print(str(c)) for c in risk_coverages]
+
 
 

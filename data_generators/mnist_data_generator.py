@@ -5,6 +5,7 @@ import numpy as np
 from keras_preprocessing.image import ImageDataGenerator
 from itertools import count
 from sklearn.model_selection import train_test_split
+from skimage.transform import rescale
 
 # load data
 (X_train, Y_train), (X_test, Y_test) = mnist.load_data()
@@ -88,6 +89,9 @@ class MYGenerator(keras.utils.Sequence):
             self.gt = self.gt[permute, :]
 
         self.batch_size = batch_size
+
+    def resize(self, h_factor, w_factor, num_channels):
+        self.imgs = rescale(self.imgs, (1, h_factor, w_factor, num_channels))
 
     def __len__(self):
         return np.int(np.ceil(len(self.gt) / float(self.batch_size)))

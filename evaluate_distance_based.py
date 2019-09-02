@@ -62,12 +62,14 @@ def pickle_embeddings(model,  pickle_name, dataset_name: str, training_ds_genera
                           outputs=model.get_layer(layer_name).output)
     if training_ds_generator is None:
         training_ds_generator = data_genetator.MYGenerator('train', batch_size=100)
+
+    training_labels = np.copy(training_ds_generator.gt)
     embeddings = encoder_model.predict_generator(training_ds_generator)
 
     os.makedirs(f'./embeddings/{dataset_name}', exist_ok=True)
 
     with open(f'./embeddings/{dataset_name}/embeddings_for_{pickle_name}.pkl', 'wb') as pkl_out:
-        pickle.dump((embeddings, training_ds_generator.gt), pkl_out)
+        pickle.dump((embeddings, training_labels), pkl_out)
 
 
 def unpickle_embeddings(pickle_name: str, dataset_name: str):
@@ -103,27 +105,32 @@ if __name__ == '__main__':
     # dataset_name = 'cifar10'
     # model_name = './results/crossentropy_classifiers_CIFAR-10/crossentropy_classifier_ 147_0.899_0.564_0.983_0.227.h5'
     # exp_name = 'ce  trained model, SR predicted'
-    # model_name = './results/distance_classifiers_CIFAR-10/distance_classifier_ 165_0.907_1.350_0.986_0.556.h5'
-    # exp_name = 'ce  trained model, SR predicted'
+    model_name = './results/distance_classifiers_CIFAR-10/distance_classifier_ 165_0.907_1.350_0.986_0.556.h5'
+    exp_name = 'ce  trained model, SR predicted'
 
-    # cifar 10 models
-    # dataset_name = 'svhn'
+
+    # svhn models
+    dataset_name = 'svhn'
     # model_name = './results/crossentropy_classifiers_SVHN/crossentropy_classifier_ 20_0.919_0.363_0.933_0.315.h5'
     # exp_name = 'ce  trained model, SR predicted'
-    # model_name = './results/distance_classifiers_SVHN/distance_classifier_ 24_0.917_0.921_0.934_0.860.h5'
-    # exp_name = 'svhn distance  trained model, SR predicted'
+    model_name = './results/distance_classifiers_SVHN/distance_classifier_ 24_0.917_0.921_0.934_0.860.h5'
+    model_name = './results/distance_classifiers_svhn_SVHN_new/distance_classifier_svhn_ 24_0.921_0.895_0.936_0.850.h5'
+    exp_name = 'svhn distance  trained model, SR predicted'
 
     # loading data
     if dataset_name == 'cifar10':
-        from data_generators import cifar10_data_generator as data_genetator, svhn_data_generator as data_genetator, \
-            cifar100_data_generator as data_genetator
-        from models import distance_classifier, SVHN_arch_classifier as distance_classifier
+        from data_generators import cifar10_data_generator as data_genetator
+        from models import distance_classifier as distance_classifier
 
         print("eval. on cifar10")
     elif dataset_name == 'cifar100':
+        from data_generators import cifar100_data_generator as data_genetator
+        from models import distance_classifier as distance_classifier
 
         print("eval. on cifar100")
     elif dataset_name == 'svhn':
+        from data_generators import svhn_data_generator as data_genetator
+        from models import SVHN_arch_classifier as distance_classifier
 
         print("eval. on svhn")
 
@@ -140,8 +147,8 @@ if __name__ == '__main__':
 
     # checking predictions
     test_generator = data_genetator.MYGenerator(data_type='test', batch_size=batch_size, shuffle=True)
-    y_pred = my_classifier.predict_generator(test_generator)
     y_true = test_generator.gt
+    y_pred = my_classifier.predict_generator(test_generator)
     predictions_masks = np_utils.to_categorical(y_pred.argmax(axis=-1))
     y_true = np.sum(y_true*predictions_masks, axis=-1)
 
@@ -159,6 +166,7 @@ if __name__ == '__main__':
         layer_name = 'embedding'
         encoder_model = Model(inputs=my_classifier.input,
                               outputs=my_classifier.get_layer(layer_name).output)
+        y_true = test_generator.gt
         test_embeddings = encoder_model.predict_generator(test_generator)
         distance_scores = distance_score(test_embeddings, x_embeddings_train=pkl[0], y_true_train=pkl[1], K=50)
         distance_scores[np.isnan(distance_scores)] = 0

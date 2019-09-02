@@ -115,8 +115,10 @@ datagen.fit(X_train)
 
 class MYGenerator(keras.utils.Sequence):
 
-    def __init__(self, data_type: str, batch_size: int = 100, shuffle: bool = False):
+    def __init__(self, data_type: str, batch_size: int = 100, shuffle: bool = False,
+                 input_size=(32,32,3), preprocessing_fun=None):
 
+        self.data_type = data_type
         if data_type == 'train':
             self.imgs = X_train
             self.labels = Y_train
@@ -134,6 +136,7 @@ class MYGenerator(keras.utils.Sequence):
             self.labels = self.labels[permute, :]
 
         self.batch_size = batch_size
+        self.gt = self.labels
 
     def __len__(self):
         return np.int(np.ceil(len(self.labels) / float(self.batch_size)))
@@ -146,3 +149,39 @@ class MYGenerator(keras.utils.Sequence):
         batch_y = self.labels[idx * self.batch_size: (idx + 1) * self.batch_size, :]
 
         return batch_x, batch_y
+
+    def on_epoch_end(self):
+
+        if self.data_type == 'test':
+            return
+        print(f'on epoch end: {self.data_type}')
+        all_samples = np.arange(self.imgs.shape[0])
+        all_samples_classes = np.copy(self.labels)
+        new_order = np.zeros(self.imgs.shape[0], dtype=np.int)
+        batch_size = self.batch_size
+        for batch_idx in range(len(self)):
+            all_samples_classes_transposed = np.transpose(all_samples_classes)
+            classes_to_chose_pairs_from = np.where(all_samples_classes.sum(axis=0) > 2)[0]
+            current_batch = []
+            for class_i in classes_to_chose_pairs_from:
+
+                mask = all_samples_classes_transposed[class_i, :]
+                pairs = np.random.permutation(np.where(mask)[0])[:2]
+                current_batch.extend(pairs)
+
+            all_samples = np.setdiff1d(all_samples, current_batch)
+            current_batch.extend(np.random.permutation(all_samples)[:batch_size-len(current_batch)])
+
+            new_order[batch_idx*batch_size:(batch_idx+1)*batch_size] = current_batch
+            all_samples = np.setdiff1d(all_samples, current_batch)
+
+            all_samples_classes[current_batch] = 0
+
+        assert np.sum(np.diff(np.sort(new_order)) - 1) == 0
+        self.imgs = self.imgs[new_order]
+        self.labels = self.labels[new_order]
+        self.gt = self.labels
+
+if __name__ =='__main__':
+    dg = MYGenerator('train')
+    dg.on_epoch_end()

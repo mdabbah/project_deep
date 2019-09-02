@@ -113,7 +113,7 @@ def build_inception_resnet_classifier(input_size=(96, 96, 3)):
     :param input_size: the input size of the network
     :return: a keras Model
     """
-    num_classes = data_genetator.nb_classes
+    num_classes = data_generator.nb_classes
     base_model = inception_resnet_v2.InceptionResNetV2(include_top=False, input_shape=input_size,
                                                        classes=num_classes, pooling='avg')
 
@@ -137,10 +137,10 @@ def build_inception_resnet_classifier(input_size=(96, 96, 3)):
 if __name__ == '__main__':
 
     # wheere to save weights , dataset & training details change if needed
-    data_set = 'CIFAR-100'
-    training_type = 'crossentropy_classifier'  # options 'crossentropy_classifier', 'distance_classifier'
-    arch = 'ResNet18'
-    weights_folder = f'./results/{training_type}s_{arch}_{data_set}'
+    data_set = 'SVHN'
+    training_type = 'distance_classifier'  # options 'crossentropy_classifier', 'distance_classifier'
+    arch = 'svhn'
+    weights_folder = f'./results/{training_type}s_{arch}_{data_set}_new'
     os.makedirs(weights_folder, exist_ok=True)
     weights_file = f'{weights_folder}/{training_type}_{arch}' \
                    '_{epoch: 03d}_{val_acc:.3f}_{val_loss:.3f}_{acc:.3f}_{loss:.3f}.h5'
@@ -157,13 +157,14 @@ if __name__ == '__main__':
 
     # loading data
     if data_set == 'CIFAR-10':
-        from data_generators import cifar10_data_generator as data_genetator, svhn_data_generator as data_genetator, \
-            cifar100_data_generator as data_genetator
+        from data_generators import cifar10_data_generator as data_generator
 
         print("training on cifar10")
     elif data_set == 'CIFAR-100':
+        from data_generators import cifar100_data_generator as data_generator
         print("training on cifar100")
     elif data_set == 'SVHN':
+        from data_generators import svhn_data_generator as data_generator
         print("training on SVHN")
 
     # training constants, change if needed
@@ -173,19 +174,20 @@ if __name__ == '__main__':
     distance_loss_coeff = 0.2
     shuffle = False
     input_size = (32, 32, 3)
-    num_training_xsamples_per_epoch = data_genetator.X_train.shape[0] // batch_size
-    num_validation_xsamples_per_epoch = data_genetator.X_valid.shape[0] // batch_size
+    num_training_xsamples_per_epoch = data_generator.X_train.shape[0] // batch_size
+    num_validation_xsamples_per_epoch = data_generator.X_valid.shape[0] // batch_size
     my_classifier = None
     preprocess_input_fun = None
 
     # choosing arch and optimizer
     if data_set.startswith('SVHN'):
+        from models import SVHN_arch_classifier as distance_classifier
         optimizer = Adam(lr=1e-3)
         num_epochs = 26
         print('SVHN suggested arch chosen, optimizer adam')
     else:
         if arch == 'ResNet18':
-            my_classifier = ResNet18(input_size, data_genetator.nb_classes)
+            my_classifier = ResNet18(input_size, data_generator.nb_classes)
             my_classifier.layers[-3].name = 'embedding'
             print('chose resnet18v2 arch')
             # optimizer = SGD(lr=0.1, momentum=0.9, nesterov=True)
@@ -202,21 +204,21 @@ if __name__ == '__main__':
             optimizer = SGD(lr=1e-2, momentum=0.9, nesterov=True)
 
         else:
-            from models import distance_classifier, SVHN_arch_classifier as distance_classifier
+            from models import distance_classifier
 
             print('cifar100 suggested arch chosen, optimizer SGD w. momentum')
             optimizer = SGD(lr=1e-2, momentum=0.9)
 
 
     # data generators
-    my_training_generator = data_genetator.MYGenerator(data_type='train', batch_size=batch_size, shuffle=shuffle,
+    my_training_generator = data_generator.MYGenerator(data_type='train', batch_size=batch_size, shuffle=shuffle,
                                                        input_size=input_size, preprocessing_fun=preprocess_input_fun)
-    my_validation_generator = data_genetator.MYGenerator(data_type='valid', batch_size=batch_size, shuffle=shuffle,
+    my_validation_generator = data_generator.MYGenerator(data_type='valid', batch_size=batch_size, shuffle=shuffle,
                                                          input_size=input_size, preprocessing_fun=preprocess_input_fun)
 
     # creating the classification model and compiling it
     if my_classifier is None:
-        my_classifier = distance_classifier.DistanceClassifier(input_size, num_classes=data_genetator.nb_classes)
+        my_classifier = distance_classifier.DistanceClassifier(input_size, num_classes=data_generator.nb_classes)
 
     encoder = my_classifier.get_layer('embedding')
     loss_function = \
@@ -234,12 +236,12 @@ if __name__ == '__main__':
                                 workers=1,
                                 use_multiprocessing=0)
 
-    test_generator = data_genetator.MYGenerator(data_type='test', batch_size=batch_size, shuffle=True,
+    test_generator = data_generator.MYGenerator(data_type='test', batch_size=batch_size, shuffle=True,
                                                 input_size=input_size, preprocessing_fun=preprocess_input_fun)
 
     # check acc
     loss, acc = my_classifier.evaluate_generator(test_generator,
-                                                    steps=data_genetator.X_test.shape[0]//batch_size)
+                                                 steps=data_generator.X_test.shape[0] // batch_size)
 
     print(f'test acc {acc}, test loss {loss}')
 
