@@ -224,16 +224,6 @@ if __name__ == '__main__':
     my_regressor.name = os.path.split(regressor_weights_path)[-1][:-3]
     my_regressor.load_weights(regressor_weights_path)
 
-    loss_functions = [accuracy, lambda y, y_hat: eval(MSE_updated(y + 0., y_hat + 0., return_vec=True))]
-    # test_generator = validation_generator
-    # test_predictions = my_regressor.predict_generator(test_generator)
-    # for loss_function in loss_functions:
-    #     print(f'current loss function {loss_function.__name__} \n')
-    #     y_true = test_generator.gt if len(test_generator.gt.shape) > 1 else np.expand_dims(test_generator.gt, 1)
-    #     y_pred = test_predictions if len(test_predictions.shape) > 1 else np.expand_dims(test_predictions, 1)
-    #     test_MSE = loss_function(y_true, y_pred).mean()
-    #     print(f'test MSE is {test_MSE}')
-
     for i in range(num_trials):
         print(f'trail number {i}\n')
         #  choose the uncertainty metric to evaluate
@@ -254,7 +244,7 @@ if __name__ == '__main__':
         test_MSE = eval(MSE_updated(y_true+0., y_pred+0.))
         print(f'valid MSE is {validation_MSE}, test MSE is {test_MSE}')
 
-        loss_functions = [lambda y,  y_hat: eval(MSE_updated(y+0., y_hat+0., return_vec=True))]
+        loss_functions = [loss_function, lambda y,  y_hat: eval(MSE_updated(y+0., y_hat+0., return_vec=True))]
         for loss_function in loss_functions:
             print(f'current loss function {loss_function.__name__} \n')
             test_losses = loss_function(y_true, y_pred)

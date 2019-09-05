@@ -166,9 +166,12 @@ if __name__ == '__main__':
         layer_name = 'embedding'
         encoder_model = Model(inputs=my_classifier.input,
                               outputs=my_classifier.get_layer(layer_name).output)
-        y_true = test_generator.gt
+        # y_true = test_generator.gt
         test_embeddings = encoder_model.predict_generator(test_generator)
         distance_scores = distance_score(test_embeddings, x_embeddings_train=pkl[0], y_true_train=pkl[1], K=50)
+        import pickle
+        with open(f'./svhn_new_dist_scores.pkl', 'wb') as pkl_out:
+            pickle.dump(distance_scores, pkl_out)
         distance_scores[np.isnan(distance_scores)] = 0
         # predictions_masks = np_utils.to_categorical(distance_scores.argmax(axis=-1))
         y_pred = np.sum(predictions_masks*distance_scores, axis=-1)

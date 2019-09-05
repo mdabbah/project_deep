@@ -192,7 +192,7 @@ loss_functions_cache = {'MSE': MSE, 'MSE_updated': MSE_updated, 'l1_smooth_loss_
 
 if __name__ == '__main__':
 
-    # wheere to save weights , dataset & training details change if needed
+    # where to save weights , dataset & training details change if needed
     data_set = 'mnist'
     training_type = 'distance_by_x_encoding'  # options 'l1_smooth_loss', 'distance_by_x_encoding'
     arch = 'simple_CNN'
@@ -202,16 +202,10 @@ if __name__ == '__main__':
                    '_{epoch: 03d}_{val_loss:.3f}_{loss:.3f}_{MSE_updated:.5f}_{val_MSE_updated: .5f}.h5'
 
     # callbacks change if needed
-    lr_reducer = ReduceLROnPlateau(factor=np.sqrt(0.1), cooldown=0,
-                                   patience=5, min_lr=0.5e-6)
-
-    # lr_scheduler_callback = LearningRateScheduler(lr_scheduler_maker(data_set))
-    early_stopper = EarlyStopping(min_delta=0.001, patience=20)
     csv_logger = CSVLogger(f'{training_type}-{data_set}-{arch}.csv')
     model_checkpoint = ModelCheckpoint(weights_file, monitor='val_MSE_updated', save_best_only=True,
                                        save_weights_only=True, mode='min')
     my_callbacks = [csv_logger, model_checkpoint]  # lr_scheduler_callback , lr_reducer, early_stopper]
-
 
     # training constants, change if needed
     batch_size = 32
@@ -289,13 +283,4 @@ if __name__ == '__main__':
                                validation_steps=num_validation_xsamples_per_epoch,
                                workers=1,
                                use_multiprocessing=0)
-
-    test_generator = data_generator.MYGenerator(data_type='test', batch_size=batch_size, shuffle=True,
-                                                use_nans=True, horizontal_flip_prob=0)
-
-    # check acc
-    loss, acc = my_regressor.evaluate_generator(test_generator,
-                                                steps=len(test_generator))
-
-    print(f'test acc {acc}, test loss {loss}')
 

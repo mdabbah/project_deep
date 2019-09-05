@@ -146,10 +146,7 @@ if __name__ == '__main__':
                    '_{epoch: 03d}_{val_acc:.3f}_{val_loss:.3f}_{acc:.3f}_{loss:.3f}.h5'
 
     # callbacks change if needed
-    lr_reducer = ReduceLROnPlateau(factor=np.sqrt(0.1), cooldown=0,
-                                   patience=5, min_lr=0.5e-6)
     lr_scheduler_callback = LearningRateScheduler(lr_scheduler_maker(data_set))
-    early_stopper = EarlyStopping(min_delta=0.001, patience=20)
     csv_logger = CSVLogger(f'{training_type}-{data_set}.csv')
     model_checkpoint = ModelCheckpoint(weights_file, monitor='val_acc', save_best_only=True,
                                        save_weights_only=True, mode='auto')
@@ -238,10 +235,4 @@ if __name__ == '__main__':
 
     test_generator = data_generator.MYGenerator(data_type='test', batch_size=batch_size, shuffle=True,
                                                 input_size=input_size, preprocessing_fun=preprocess_input_fun)
-
-    # check acc
-    loss, acc = my_classifier.evaluate_generator(test_generator,
-                                                 steps=data_generator.X_test.shape[0] // batch_size)
-
-    print(f'test acc {acc}, test loss {loss}')
 

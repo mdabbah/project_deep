@@ -152,6 +152,7 @@ class MYGenerator(keras.utils.Sequence):
 
     def on_epoch_end(self):
 
+        return
         if self.data_type == 'test':
             return
         print(f'on epoch end: {self.data_type}')
