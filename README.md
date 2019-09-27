@@ -6,6 +6,10 @@ The project is split into two parts:
 
 for part one use train_distance_based.py for training the models, and evaluate_distance_based.py for evaluation 
 
+the results show that the newly devised "min dist." confidence metric beats MC dropout in regression problems
+
+for complete analysis and report please read the project [summary]( https://technionmail-my.sharepoint.com/:w:/g/personal/mdabbah_campus_technion_ac_il/EeWVB2q-jSdLjiDXN0vsf98BpZG-j-QgjyDRfNrXNWwRuA?e=TqC9dC)
+
 ##  results for part 1. are:
 values are auc on binary classification of the conf. score on weather the model predicted the right label or not, more detailes in the paper
 
